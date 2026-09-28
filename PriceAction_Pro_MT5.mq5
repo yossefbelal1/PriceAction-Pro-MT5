@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "3.10"
+#property version   "4.00"
 #property description "Professional Price Action Trading System with Strict Mode Separation:"
 #property description "MODE A: BOOK_EXACT (Pure Price Action from 97-Page Course: Swings, S/R, Flips, 50% Confluence)"
 #property description "MODE B: ENHANCED (Optional Overlays: EMA, RSI, VSA, HTF Order Blocks/FVG)"
@@ -287,7 +287,17 @@ int OnInit()
 {
    m_trade.SetExpertMagicNumber(InpMagicNumber);
    m_trade.SetDeviationInPoints(InpSlippagePoints);
-   m_trade.SetTypeFilling(ORDER_FILLING_FOK);
+   // Symbol-aware filling mode detection (never hard-code FOK)
+   {
+      int fillingMode = (int)SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+      if((fillingMode & SYMBOL_FILLING_FOK) != 0)
+         m_trade.SetTypeFilling(ORDER_FILLING_FOK);
+      else if((fillingMode & SYMBOL_FILLING_IOC) != 0)
+         m_trade.SetTypeFilling(ORDER_FILLING_IOC);
+      else
+         m_trade.SetTypeFilling(ORDER_FILLING_RETURN);
+      PrintFormat("[Init] Filling mode set based on SYMBOL_FILLING_MODE bitmask: %d", fillingMode);
+   }
 
    m_point = _Point;
    m_pipSize = (_Digits == 3 || _Digits == 5) ? _Point * 10.0 : _Point;
@@ -407,7 +417,7 @@ void OnTick()
    // 8. Fetch Execution Timeframe Rates (Closed candles shift 1 to 15)
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   int copied = CopyRates(_Symbol, _Period, 0, MathMax(InpSwingScanBars, 200), rates);
+   int copied = CopyRates(_Symbol, _Period, 0, MathMax(MathMax(InpSwingScanBars, InpSRLookbackBars) + InpSwingConfirmBars + 10, 200), rates);
    if(copied < 50) return;
 
    // Determine Current Market Trend Context (Strict Swings in Book Exact)
@@ -505,7 +515,7 @@ void UpdateSwingsAndStructure()
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   int lookback = MathMax(InpSwingScanBars + InpSwingConfirmBars + 5, 200);
+   int lookback = MathMax(MathMax(InpSwingScanBars, InpSRLookbackBars) + InpSwingConfirmBars + 10, 200);
    int copied = CopyRates(_Symbol, _Period, 0, lookback, rates);
    if(copied < (InpSwingConfirmBars * 2 + 10)) return;
 
@@ -1082,16 +1092,25 @@ bool ValidateBrokerDistance(double orderPrice, double slPrice, double tpPrice)
 {
    long stopsLevel = 0;
    SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL, stopsLevel);
-   double minDistance = stopsLevel * m_point;
+   double minStopsDist = stopsLevel * m_point;
+
+   long freezeLevel = 0;
+   SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL, freezeLevel);
+   double minFreezeDist = freezeLevel * m_point;
+
+   // Use the larger of stops-level and freeze-level
+   double minDistance = MathMax(minStopsDist, minFreezeDist);
 
    if(MathAbs(orderPrice - slPrice) < minDistance)
    {
-      if(InpEnableDebugLog) PrintFormat("[Broker Validation Failed] SL distance (%f) < StopsLevel (%f)", MathAbs(orderPrice - slPrice), minDistance);
+      if(InpEnableDebugLog) PrintFormat("[Broker Validation Failed] SL distance (%f) < MinDistance (%f) [Stops=%d, Freeze=%d]",
+         MathAbs(orderPrice - slPrice), minDistance, stopsLevel, freezeLevel);
       return false;
    }
    if(tpPrice > 0.0 && MathAbs(orderPrice - tpPrice) < minDistance)
    {
-      if(InpEnableDebugLog) PrintFormat("[Broker Validation Failed] TP distance (%f) < StopsLevel (%f)", MathAbs(orderPrice - tpPrice), minDistance);
+      if(InpEnableDebugLog) PrintFormat("[Broker Validation Failed] TP distance (%f) < MinDistance (%f) [Stops=%d, Freeze=%d]",
+         MathAbs(orderPrice - tpPrice), minDistance, stopsLevel, freezeLevel);
       return false;
    }
    return true;
@@ -1121,11 +1140,28 @@ bool ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          if(m_trade.Buy(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " PinBar_Buy"))
          {
-            ulong posTicket = m_trade.ResultDeal();
-            if(posTicket == 0) posTicket = m_trade.ResultOrder();
+            uint retcode = m_trade.ResultRetcode();
+            if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+            {
+               PrintFormat("[EXEC FAILED] Buy PinBar retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+               return false;
+            }
+            // Get actual position ticket via deal→position mapping
+            ulong dealTicket = m_trade.ResultDeal();
+            ulong posTicket = 0;
+            if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+               posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+            if(posTicket == 0) posTicket = m_trade.ResultOrder(); // fallback for pending
+            if(posTicket == 0) { PrintFormat("[EXEC WARNING] Buy PinBar: no position ticket obtained"); return false; }
+            PrintFormat("[EXEC OK] Buy PinBar deal=%I64u pos=%I64u retcode=%u", dealTicket, posTicket, retcode);
             RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "PinBar_Buy");
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, pin.low, "Pin Buy", clrLimeGreen, true);
             return true;
+         }
+         else
+         {
+            PrintFormat("[EXEC FAILED] Buy PinBar m_trade.Buy returned false. retcode=%u desc=%s",
+               m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
       else // 50% Limit Entry (PDF Page 62)
@@ -1145,12 +1181,32 @@ bool ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, true);
 
          if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
-         datetime expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
-
-         if(m_trade.BuyLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " Pin_50_Limit"))
+         // Check symbol expiration support
+         int expMode = (int)SymbolInfoInteger(_Symbol, SYMBOL_EXPIRATION_MODE);
+         ENUM_ORDER_TYPE_TIME orderTimeType = ORDER_TIME_GTC;
+         datetime expiry = 0;
+         if((expMode & SYMBOL_EXPIRATION_SPECIFIED) != 0)
          {
+            orderTimeType = ORDER_TIME_SPECIFIED;
+            expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
+         }
+
+         if(m_trade.BuyLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, modeTag + " Pin_50_Limit"))
+         {
+            uint retcode = m_trade.ResultRetcode();
+            if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+            {
+               PrintFormat("[EXEC FAILED] BuyLimit PinBar retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+               return false;
+            }
+            PrintFormat("[EXEC OK] BuyLimit PinBar order=%I64u retcode=%u", m_trade.ResultOrder(), retcode);
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, entryPrice, "50% BuyLimit", clrLimeGreen, true);
             return true;
+         }
+         else
+         {
+            PrintFormat("[EXEC FAILED] BuyLimit PinBar m_trade.BuyLimit returned false. retcode=%u desc=%s",
+               m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
    }
@@ -1167,11 +1223,27 @@ bool ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          if(m_trade.Sell(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " PinBar_Sell"))
          {
-            ulong posTicket = m_trade.ResultDeal();
+            uint retcode = m_trade.ResultRetcode();
+            if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+            {
+               PrintFormat("[EXEC FAILED] Sell PinBar retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+               return false;
+            }
+            ulong dealTicket = m_trade.ResultDeal();
+            ulong posTicket = 0;
+            if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+               posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
             if(posTicket == 0) posTicket = m_trade.ResultOrder();
+            if(posTicket == 0) { PrintFormat("[EXEC WARNING] Sell PinBar: no position ticket obtained"); return false; }
+            PrintFormat("[EXEC OK] Sell PinBar deal=%I64u pos=%I64u retcode=%u", dealTicket, posTicket, retcode);
             RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "PinBar_Sell");
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, pin.high, "Pin Sell", clrCrimson, false);
             return true;
+         }
+         else
+         {
+            PrintFormat("[EXEC FAILED] Sell PinBar m_trade.Sell returned false. retcode=%u desc=%s",
+               m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
       else // 50% Limit Entry (PDF Page 62)
@@ -1190,12 +1262,31 @@ bool ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, false);
 
          if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
-         datetime expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
-
-         if(m_trade.SellLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " Pin_50_Limit"))
+         int expMode = (int)SymbolInfoInteger(_Symbol, SYMBOL_EXPIRATION_MODE);
+         ENUM_ORDER_TYPE_TIME orderTimeType = ORDER_TIME_GTC;
+         datetime expiry = 0;
+         if((expMode & SYMBOL_EXPIRATION_SPECIFIED) != 0)
          {
+            orderTimeType = ORDER_TIME_SPECIFIED;
+            expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
+         }
+
+         if(m_trade.SellLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, modeTag + " Pin_50_Limit"))
+         {
+            uint retcode = m_trade.ResultRetcode();
+            if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+            {
+               PrintFormat("[EXEC FAILED] SellLimit PinBar retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+               return false;
+            }
+            PrintFormat("[EXEC OK] SellLimit PinBar order=%I64u retcode=%u", m_trade.ResultOrder(), retcode);
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, entryPrice, "50% SellLimit", clrCrimson, false);
             return true;
+         }
+         else
+         {
+            PrintFormat("[EXEC FAILED] SellLimit PinBar m_trade.SellLimit returned false. retcode=%u desc=%s",
+               m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
    }
@@ -1220,11 +1311,27 @@ bool ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy
       if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
       if(m_trade.Buy(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " Fakey_Buy"))
       {
-         ulong posTicket = m_trade.ResultDeal();
+         uint retcode = m_trade.ResultRetcode();
+         if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+         {
+            PrintFormat("[EXEC FAILED] Buy Fakey retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+            return false;
+         }
+         ulong dealTicket = m_trade.ResultDeal();
+         ulong posTicket = 0;
+         if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+            posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
          if(posTicket == 0) posTicket = m_trade.ResultOrder();
+         if(posTicket == 0) { PrintFormat("[EXEC WARNING] Buy Fakey: no position ticket"); return false; }
+         PrintFormat("[EXEC OK] Buy Fakey deal=%I64u pos=%I64u retcode=%u", dealTicket, posTicket, retcode);
          RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "Fakey_Buy");
          if(InpDrawChartObjects) DrawSignalMarker(bar.time, bar.low, "Fakey Buy", clrLimeGreen, true);
          return true;
+      }
+      else
+      {
+         PrintFormat("[EXEC FAILED] Buy Fakey m_trade.Buy returned false. retcode=%u desc=%s",
+            m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
       }
    }
    else
@@ -1237,11 +1344,27 @@ bool ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy
       if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
       if(m_trade.Sell(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " Fakey_Sell"))
       {
-         ulong posTicket = m_trade.ResultDeal();
+         uint retcode = m_trade.ResultRetcode();
+         if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+         {
+            PrintFormat("[EXEC FAILED] Sell Fakey retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
+            return false;
+         }
+         ulong dealTicket = m_trade.ResultDeal();
+         ulong posTicket = 0;
+         if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+            posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
          if(posTicket == 0) posTicket = m_trade.ResultOrder();
+         if(posTicket == 0) { PrintFormat("[EXEC WARNING] Sell Fakey: no position ticket"); return false; }
+         PrintFormat("[EXEC OK] Sell Fakey deal=%I64u pos=%I64u retcode=%u", dealTicket, posTicket, retcode);
          RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "Fakey_Sell");
          if(InpDrawChartObjects) DrawSignalMarker(bar.time, bar.high, "Fakey Sell", clrCrimson, false);
          return true;
+      }
+      else
+      {
+         PrintFormat("[EXEC FAILED] Sell Fakey m_trade.Sell returned false. retcode=%u desc=%s",
+            m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
       }
    }
    return false;
@@ -1253,7 +1376,14 @@ bool ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy
 bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideCount, ENUM_MARKET_TREND trend)
 {
    const MqlRates mother = rates[motherShift];
-   datetime expiry = TimeCurrent() + (InpIBOrderExpiryBars * PeriodSeconds(_Period));
+   int expMode = (int)SymbolInfoInteger(_Symbol, SYMBOL_EXPIRATION_MODE);
+   ENUM_ORDER_TYPE_TIME orderTimeType = ORDER_TIME_GTC;
+   datetime expiry = 0;
+   if((expMode & SYMBOL_EXPIRATION_SPECIFIED) != 0)
+   {
+      orderTimeType = ORDER_TIME_SPECIFIED;
+      expiry = TimeCurrent() + (InpIBOrderExpiryBars * PeriodSeconds(_Period));
+   }
    double buffer = InpIBBreakoutBufferPips * m_pipSize;
    string modeTag = (InpStrategyMode == MODE_BOOK_EXACT) ? "[BOOK_EXACT]" : "[ENHANCED]";
 
@@ -1299,10 +1429,19 @@ bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          if(ValidateBrokerDistance(buyPrice, slPrice, tpPrice))
          {
             string comment = StringFormat("%s IB_BuyStop [%s]", modeTag, pairTag);
-            if(m_trade.BuyStop(lot, buyPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, comment))
+            if(m_trade.BuyStop(lot, buyPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, comment))
             {
-               buyTicket = m_trade.ResultOrder();
+               uint retcode = m_trade.ResultRetcode();
+               if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+               {
+                  buyTicket = m_trade.ResultOrder();
+                  PrintFormat("[EXEC OK] BuyStop IB order=%I64u retcode=%u", buyTicket, retcode);
+               }
+               else
+                  PrintFormat("[EXEC FAILED] BuyStop IB retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
             }
+            else
+               PrintFormat("[EXEC FAILED] BuyStop IB returned false. retcode=%u desc=%s", m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
    }
@@ -1319,10 +1458,19 @@ bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          if(ValidateBrokerDistance(sellPrice, slPrice, tpPrice))
          {
             string comment = StringFormat("%s IB_SellStop [%s]", modeTag, pairTag);
-            if(m_trade.SellStop(lot, sellPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, comment))
+            if(m_trade.SellStop(lot, sellPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, comment))
             {
-               sellTicket = m_trade.ResultOrder();
+               uint retcode = m_trade.ResultRetcode();
+               if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+               {
+                  sellTicket = m_trade.ResultOrder();
+                  PrintFormat("[EXEC OK] SellStop IB order=%I64u retcode=%u", sellTicket, retcode);
+               }
+               else
+                  PrintFormat("[EXEC FAILED] SellStop IB retcode=%u desc=%s", retcode, m_trade.ResultRetcodeDescription());
             }
+            else
+               PrintFormat("[EXEC FAILED] SellStop IB returned false. retcode=%u desc=%s", m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
       }
    }
@@ -1445,9 +1593,17 @@ void ManageActivePositions()
                {
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
-                     m_trackedPositions[trackIdx].breakEvenApplied = true;
-                     PrintFormat("[Break-Even] Position #%I64u moved to Break-Even at %f", ticket, newSL);
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                     {
+                        m_trackedPositions[trackIdx].breakEvenApplied = true;
+                        PrintFormat("[Break-Even OK] Position #%I64u moved to BE at %f retcode=%u", ticket, newSL, retcode);
+                     }
+                     else
+                        PrintFormat("[Break-Even WARN] Position #%I64u modify retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
                   }
+                  else
+                     PrintFormat("[Break-Even FAILED] Position #%I64u PositionModify returned false. retcode=%u desc=%s", ticket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
                }
             }
          }
@@ -1460,9 +1616,17 @@ void ManageActivePositions()
                {
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
-                     m_trackedPositions[trackIdx].breakEvenApplied = true;
-                     PrintFormat("[Break-Even] Position #%I64u moved to Break-Even at %f", ticket, newSL);
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                     {
+                        m_trackedPositions[trackIdx].breakEvenApplied = true;
+                        PrintFormat("[Break-Even OK] Position #%I64u moved to BE at %f retcode=%u", ticket, newSL, retcode);
+                     }
+                     else
+                        PrintFormat("[Break-Even WARN] Position #%I64u modify retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
                   }
+                  else
+                     PrintFormat("[Break-Even FAILED] Position #%I64u PositionModify returned false. retcode=%u desc=%s", ticket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
                }
             }
          }
@@ -1481,7 +1645,14 @@ void ManageActivePositions()
                double newSL = currentPrice - trailStepDist;
                if(newSL > currentSL && (newSL - currentSL) >= (m_pipSize * 1.0))
                {
-                  m_trade.PositionModify(ticket, newSL, currentTP);
+                  if(m_trade.PositionModify(ticket, newSL, currentTP))
+                  {
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                        PrintFormat("[Trailing OK] BUY Position #%I64u trailed to SL=%f retcode=%u", ticket, newSL, retcode);
+                     else
+                        PrintFormat("[Trailing WARN] BUY Position #%I64u retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
+                  }
                }
             }
          }
@@ -1490,9 +1661,16 @@ void ManageActivePositions()
             if(currentPrice <= (openPrice - trailStartDist))
             {
                double newSL = currentPrice + trailStepDist;
-               if((currentSL == 0.0 || newSL < currentSL) && (currentSL - newSL) >= (m_pipSize * 1.0))
+               if((currentSL == 0.0 || newSL < currentSL) && (currentSL == 0.0 || (currentSL - newSL) >= (m_pipSize * 1.0)))
                {
-                  m_trade.PositionModify(ticket, newSL, currentTP);
+                  if(m_trade.PositionModify(ticket, newSL, currentTP))
+                  {
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                        PrintFormat("[Trailing OK] SELL Position #%I64u trailed to SL=%f retcode=%u", ticket, newSL, retcode);
+                     else
+                        PrintFormat("[Trailing WARN] SELL Position #%I64u retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
+                  }
                }
             }
          }
@@ -1518,9 +1696,15 @@ void ManageOCOPendingPairs()
       {
          if(OrderSelect(m_ocoPairs[i].sellStopTicket))
          {
-            m_trade.OrderDelete(m_ocoPairs[i].sellStopTicket);
-            PrintFormat("[OCO] Buy order #%I64u filled. Deleted opposite SellStop #%I64u", 
-                        m_ocoPairs[i].buyStopTicket, m_ocoPairs[i].sellStopTicket);
+            if(m_trade.OrderDelete(m_ocoPairs[i].sellStopTicket))
+            {
+               uint retcode = m_trade.ResultRetcode();
+               PrintFormat("[OCO OK] Buy #%I64u filled. Deleted SellStop #%I64u retcode=%u", 
+                           m_ocoPairs[i].buyStopTicket, m_ocoPairs[i].sellStopTicket, retcode);
+            }
+            else
+               PrintFormat("[OCO FAILED] OrderDelete SellStop #%I64u retcode=%u desc=%s",
+                  m_ocoPairs[i].sellStopTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
          m_ocoPairs[i].isActive = false;
       }
@@ -1528,9 +1712,15 @@ void ManageOCOPendingPairs()
       {
          if(OrderSelect(m_ocoPairs[i].buyStopTicket))
          {
-            m_trade.OrderDelete(m_ocoPairs[i].buyStopTicket);
-            PrintFormat("[OCO] Sell order #%I64u filled. Deleted opposite BuyStop #%I64u", 
-                        m_ocoPairs[i].sellStopTicket, m_ocoPairs[i].buyStopTicket);
+            if(m_trade.OrderDelete(m_ocoPairs[i].buyStopTicket))
+            {
+               uint retcode = m_trade.ResultRetcode();
+               PrintFormat("[OCO OK] Sell #%I64u filled. Deleted BuyStop #%I64u retcode=%u",
+                           m_ocoPairs[i].sellStopTicket, m_ocoPairs[i].buyStopTicket, retcode);
+            }
+            else
+               PrintFormat("[OCO FAILED] OrderDelete BuyStop #%I64u retcode=%u desc=%s",
+                  m_ocoPairs[i].buyStopTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
          }
          m_ocoPairs[i].isActive = false;
       }
@@ -1557,9 +1747,15 @@ void ManageOCOPendingPairs()
          {
             if(StringFind(m_order.Comment(), ocoTag) >= 0)
             {
-               m_trade.OrderDelete(m_order.Ticket());
-               PrintFormat("[OCO Recovery] Active position has tag %s. Canceled remaining pending order #%I64u", 
-                           ocoTag, m_order.Ticket());
+               ulong ocoOrderTicket = m_order.Ticket();
+               if(m_trade.OrderDelete(ocoOrderTicket))
+               {
+                  uint retcode = m_trade.ResultRetcode();
+                  PrintFormat("[OCO Recovery OK] Tag %s. Deleted pending #%I64u retcode=%u", ocoTag, ocoOrderTicket, retcode);
+               }
+               else
+                  PrintFormat("[OCO Recovery FAILED] Tag %s. OrderDelete #%I64u retcode=%u desc=%s",
+                     ocoTag, ocoOrderTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
             }
          }
       }
@@ -1571,6 +1767,9 @@ void ManageOCOPendingPairs()
 //+------------------------------------------------------------------+
 void RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup)
 {
+   // Prevent duplicate tracker entries
+   if(FindTrackedPositionIndex(ticket) >= 0) return;
+
    int sz = ArraySize(m_trackedPositions);
    ArrayResize(m_trackedPositions, sz + 1);
 
@@ -1635,7 +1834,11 @@ void CleanExpiredPendingOrders()
             datetime exp = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
             if(exp > 0 && TimeCurrent() >= exp)
             {
-               m_trade.OrderDelete(m_order.Ticket());
+               ulong expTicket = m_order.Ticket();
+               if(m_trade.OrderDelete(expTicket))
+                  PrintFormat("[CleanExpired OK] Deleted expired order #%I64u retcode=%u", expTicket, m_trade.ResultRetcode());
+               else
+                  PrintFormat("[CleanExpired FAILED] Order #%I64u retcode=%u desc=%s", expTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
             }
          }
       }

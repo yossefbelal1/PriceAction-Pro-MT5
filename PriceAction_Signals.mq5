@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "3.00"
+#property version   "4.00"
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -82,6 +82,18 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
    if(rates_total < 10) return 0;
+
+   // Explicit array orientation (non-series = index 0 is oldest bar)
+   ArraySetAsSeries(time, false);
+   ArraySetAsSeries(open, false);
+   ArraySetAsSeries(high, false);
+   ArraySetAsSeries(low, false);
+   ArraySetAsSeries(close, false);
+   ArraySetAsSeries(tick_volume, false);
+   ArraySetAsSeries(volume, false);
+   ArraySetAsSeries(spread, false);
+   ArraySetAsSeries(BufferBullish, false);
+   ArraySetAsSeries(BufferBearish, false);
 
    // Start calculation from the last calculated bar or from bar 5
    int start = prev_calculated - 1;
