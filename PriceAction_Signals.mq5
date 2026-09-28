@@ -1,49 +1,48 @@
 //+------------------------------------------------------------------+
 //|                                         PriceAction_Signals.mq5  |
 //|                                  Copyright 2026, Antigravity AI  |
-//|               Visual Indicator for MT5: Pin Bar, Inside Bar, Fakey|
+//|                 Nial Fuller Price Action Visual Signal Indicator |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
-#property link      "https://github.com"
-#property version   "1.00"
+#property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
+#property version   "3.00"
 #property indicator_chart_window
-#property indicator_buffers 4
+#property indicator_buffers 2
 #property indicator_plots   2
 
-//--- Plot 1: Bullish Signals (Arrow Up)
-#property indicator_label1  "Bullish Price Action"
+//--- Plot 1: Bullish Price Action Signals (Arrow Up)
+#property indicator_label1  "Bullish Signal"
 #property indicator_type1   DRAW_ARROW
 #property indicator_color1  clrLimeGreen
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
 
-//--- Plot 2: Bearish Signals (Arrow Down)
-#property indicator_label2  "Bearish Price Action"
+//--- Plot 2: Bearish Price Action Signals (Arrow Down)
+#property indicator_label2  "Bearish Signal"
 #property indicator_type2   DRAW_ARROW
 #property indicator_color2  clrCrimson
 #property indicator_style2  STYLE_SOLID
 #property indicator_width2  2
 
-//--- Inputs
+//--- Input Parameters
 input group "=== Pattern Selection ==="
-input bool   InpShowPinBar       = true;   // Show Pin Bar Signals
-input bool   InpShowInsideBar    = true;   // Show Inside Bar Patterns
-input bool   InpShowFakey        = true;   // Show Fakey False Breaks
+input bool   InpShowPinBar         = true;   // Show Pin Bar Signals (PDF Pages 53-63)
+input bool   InpShowInsideBar      = true;   // Show Inside Bar Patterns (PDF Pages 71-86)
+input bool   InpShowFakey          = true;   // Show Fakey False Breaks (PDF Pages 87-97)
 
-input group "=== Pin Bar Settings ==="
-input double InpPinMinWickRatio  = 0.667;  // Min Wick Ratio (2/3)
-input double InpPinMaxBodyRatio  = 0.333;  // Max Body Ratio (1/3)
-input int    InpPinProtrudeBars  = 2;      // Protrusion Lookback
+input group "=== Mathematical Ratios (PDF Rules) ==="
+input double InpPinMinWickRatio    = 0.667;  // Minimum Tail Ratio (>= 2/3 = 66.7%)
+input double InpPinMaxBodyRatio    = 0.333;  // Maximum Real Body Ratio (<= 1/3 = 33.3%)
+input int    InpPinProtrudeLookback= 3;      // Protrusion Lookback Bars
+input double InpFakeyMinBreakPoints= 30.0;   // Minimum Obvious Fakey False-Break (Points)
 
-input group "=== Alerts ==="
-input bool   InpEnableAlerts     = true;   // Enable Popup / Sound Alert
-input bool   InpPushNotifications= false;  // Send Notification to Mobile MT5
+input group "=== Alert Settings ==="
+input bool   InpEnableAlerts       = true;   // Enable Popup / Audio Alerts on Bar Close
+input bool   InpPushNotifications  = false;  // Send Notification to Mobile MT5 App
 
 //--- Indicator Buffers
 double BufferBullish[];
 double BufferBearish[];
-double BufferCalculations[];
-double BufferTrend[];
 
 datetime g_lastAlertTime = 0;
 
@@ -54,16 +53,17 @@ int OnInit()
 {
    SetIndexBuffer(0, BufferBullish, INDICATOR_DATA);
    SetIndexBuffer(1, BufferBearish, INDICATOR_DATA);
-   SetIndexBuffer(2, BufferCalculations, INDICATOR_CALCULATIONS);
-   SetIndexBuffer(3, BufferTrend, INDICATOR_CALCULATIONS);
 
-   PlotIndexSetInteger(0, PLOT_ARROW, 233); // Wingdings Arrow Up
-   PlotIndexSetInteger(1, PLOT_ARROW, 234); // Wingdings Arrow Down
+   PlotIndexSetInteger(0, PLOT_ARROW, 233); // Wingdings Up Arrow
+   PlotIndexSetInteger(1, PLOT_ARROW, 234); // Wingdings Down Arrow
+
+   PlotIndexSetDouble(0, PLOT_EMPTY_VALUE, EMPTY_VALUE);
+   PlotIndexSetDouble(1, PLOT_EMPTY_VALUE, EMPTY_VALUE);
 
    ArrayInitialize(BufferBullish, EMPTY_VALUE);
    ArrayInitialize(BufferBearish, EMPTY_VALUE);
 
-   IndicatorSetString(INDICATOR_SHORTNAME, "Price Action Master (Nial Fuller Rules)");
+   IndicatorSetString(INDICATOR_SHORTNAME, "Price Action Master Signals (PDF Exact)");
    return INIT_SUCCEEDED;
 }
 
@@ -83,12 +83,16 @@ int OnCalculate(const int rates_total,
 {
    if(rates_total < 10) return 0;
 
+   // Start calculation from the last calculated bar or from bar 5
    int start = prev_calculated - 1;
-   if(start < 3) start = 3;
+   if(start < 5) start = 5;
 
    double pipSize = (_Digits == 3 || _Digits == 5) ? _Point * 10.0 : _Point;
+   double minFakeyBreak = InpFakeyMinBreakPoints * _Point;
 
-   for(int i = start; i < rates_total - 1; i++)
+   // Calculate up to the last closed bar (rates_total - 2)
+   // Bar index (rates_total - 1) is currently forming and MUST NOT produce historical signals
+   for(int i = start; i <= rates_total - 2; i++)
    {
       BufferBullish[i] = EMPTY_VALUE;
       BufferBearish[i] = EMPTY_VALUE;
@@ -96,54 +100,91 @@ int OnCalculate(const int rates_total,
       double range = high[i] - low[i];
       if(range <= 0.0) continue;
 
-      double body = MathAbs(close[i] - open[i]);
+      double body      = MathAbs(close[i] - open[i]);
       double upperWick = high[i] - MathMax(open[i], close[i]);
       double lowerWick = MathMin(open[i], close[i]) - low[i];
 
-      // 1. PIN BAR CHECK
+      bool bullSignal = false;
+      bool bearSignal = false;
+      string signalName = "";
+
+      // 1. PIN BAR PATTERN (PDF Pages 53-63)
       if(InpShowPinBar && (body / range) <= InpPinMaxBodyRatio)
       {
-         bool protrudesLow = true;
+         bool protrudesLow  = true;
          bool protrudesHigh = true;
-         for(int b = 1; b <= InpPinProtrudeBars; b++)
+
+         for(int b = 1; b <= InpPinProtrudeLookback; b++)
          {
             if((i - b) >= 0)
             {
-               if(low[i] >= low[i - b])   protrudesLow = false;
+               if(low[i] >= low[i - b])   protrudesLow  = false;
                if(high[i] <= high[i - b]) protrudesHigh = false;
             }
          }
 
          if((lowerWick / range) >= InpPinMinWickRatio && protrudesLow)
          {
-            BufferBullish[i] = low[i] - (5.0 * pipSize);
-            TriggerAlert("Bullish Pin Bar", time[i]);
+            bullSignal = true;
+            signalName = "Bullish Pin Bar";
          }
          else if((upperWick / range) >= InpPinMinWickRatio && protrudesHigh)
          {
-            BufferBearish[i] = high[i] + (5.0 * pipSize);
-            TriggerAlert("Bearish Pin Bar", time[i]);
+            bearSignal = true;
+            signalName = "Bearish Pin Bar";
          }
       }
 
-      // 2. FAKEY CHECK (i = False break, i-1 = Inside Bar, i-2 = Mother Bar)
-      if(InpShowFakey && (i >= 2))
+      // 2. FAKEY FALSE-BREAK PATTERN (PDF Pages 87-97)
+      if(!bullSignal && !bearSignal && InpShowFakey && (i >= 2))
       {
-         bool isInsideBar = (high[i - 1] <= high[i - 2] && low[i - 1] >= low[i - 2]);
-         if(isInsideBar)
+         // Bar i-1 was an inside bar to Bar i-2
+         bool wasInsideBar = (high[i - 1] <= high[i - 2] && low[i - 1] >= low[i - 2]);
+         if(wasInsideBar)
          {
-            // Bullish Fakey: Bar i dipped below inside bar low, then closed up
-            if(low[i] < low[i - 1] && close[i] > low[i - 1])
+            // Bullish Fakey: Bar i pierced below Inside Bar low by minBreak, closed back above
+            if(low[i] <= (low[i - 1] - minFakeyBreak) && close[i] > low[i - 1])
             {
-               BufferBullish[i] = low[i] - (8.0 * pipSize);
-               TriggerAlert("Bullish Fakey", time[i]);
+               bullSignal = true;
+               signalName = "Bullish Fakey";
             }
-            // Bearish Fakey: Bar i poked above inside bar high, then closed down
-            else if(high[i] > high[i - 1] && close[i] < high[i - 1])
+            // Bearish Fakey: Bar i pierced above Inside Bar high by minBreak, closed back below
+            else if(high[i] >= (high[i - 1] + minFakeyBreak) && close[i] < high[i - 1])
             {
-               BufferBearish[i] = high[i] + (8.0 * pipSize);
-               TriggerAlert("Bearish Fakey", time[i]);
+               bearSignal = true;
+               signalName = "Bearish Fakey";
             }
+         }
+      }
+
+      // 3. INSIDE BAR PATTERN (PDF Pages 71-86)
+      if(!bullSignal && !bearSignal && InpShowInsideBar && (i >= 1))
+      {
+         if(high[i] <= high[i - 1] && low[i] >= low[i - 1])
+         {
+            // Plot neutral markers on mother/inside bar range
+            BufferBullish[i] = low[i] - (3.0 * pipSize);
+            BufferBearish[i] = high[i] + (3.0 * pipSize);
+            continue;
+         }
+      }
+
+      // Assign Buffer Values
+      if(bullSignal)
+      {
+         BufferBullish[i] = low[i] - (5.0 * pipSize);
+         // ONLY trigger live alerts on the bar that JUST CLOSED in real-time (never during backfill)
+         if(prev_calculated > 0 && i == (rates_total - 2))
+         {
+            TriggerLiveAlert(signalName, time[i]);
+         }
+      }
+      else if(bearSignal)
+      {
+         BufferBearish[i] = high[i] + (5.0 * pipSize);
+         if(prev_calculated > 0 && i == (rates_total - 2))
+         {
+            TriggerLiveAlert(signalName, time[i]);
          }
       }
    }
@@ -152,15 +193,15 @@ int OnCalculate(const int rates_total,
 }
 
 //+------------------------------------------------------------------+
-//| Trigger alerts without duplicate noise                           |
+//| Trigger live alerts strictly once per newly confirmed candle     |
 //+------------------------------------------------------------------+
-void TriggerAlert(string patternName, datetime barTime)
+void TriggerLiveAlert(string patternName, datetime barTime)
 {
    if(!InpEnableAlerts) return;
-   if(barTime == g_lastAlertTime) return;
+   if(barTime <= g_lastAlertTime) return;
 
    g_lastAlertTime = barTime;
-   string msg = StringFormat("[%s] %s on %s, Period: %s", 
+   string msg = StringFormat("[%s] Confirmed %s on %s (%s)", 
                              TimeToString(barTime, TIME_MINUTES), 
                              patternName, _Symbol, EnumToString(_Period));
 
