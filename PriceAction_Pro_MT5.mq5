@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "3.00"
+#property version   "3.10"
 #property description "Professional Price Action Trading System with Strict Mode Separation:"
 #property description "MODE A: BOOK_EXACT (Pure Price Action from 97-Page Course: Swings, S/R, Flips, 50% Confluence)"
 #property description "MODE B: ENHANCED (Optional Overlays: EMA, RSI, VSA, HTF Order Blocks/FVG)"
@@ -106,6 +106,7 @@ struct SOCOPendingPair
    ulong    sellStopTicket;
    datetime placedTime;
    bool     isActive;
+   string   pairTag;
 };
 
 struct SProcessedSignal
@@ -162,8 +163,8 @@ input int    InpPinLimitExpiryBars = 6;      // 50% Limit Order Expiry (Candle B
 //--- 5. INSIDE BAR STRATEGY (PDF Pages 71-86)
 input group "=== 5. Inside Bar Strategy (PDF Pages 71-86) ==="
 input bool   InpEnableInsideBar    = true;   // Enable Inside Bar Trades
-input bool   InpIBContinuationOnly = true;   // Inside Bar Continuation Only (Preferred in PDF)
-input bool   InpIBReversalAtLevels = true;   // Allow Inside Bar Reversals at Key S/R Levels
+input bool   InpIBContinuationOnly = true;   // Inside Bar Continuation (With Trend)
+input bool   InpIBReversalAtLevels = true;   // Inside Bar Reversals at Key S/R Levels
 input int    InpIBMaxNestingBars   = 4;      // Max Consecutive Inside Bars (Coiling Support)
 input double InpIBBreakoutBufferPips = 1.0;  // Breakout Order Buffer Beyond Mother Bar (Pips)
 input int    InpIBOrderExpiryBars  = 8;      // Inside Bar Pending Order Expiry (Candle Bars)
@@ -172,7 +173,7 @@ input int    InpIBOrderExpiryBars  = 8;      // Inside Bar Pending Order Expiry 
 input group "=== 6. Fakey False-Break Strategy (PDF Pages 87-97) ==="
 input bool   InpEnableFakey        = true;   // Enable Fakey Strategy
 input double InpFakeyMinBreakPoints= 30.0;   // Minimum Obvious False-Break Penetration (Points)
-input bool   InpFakeyRequireKeyLevel= true;  // Require Key S/R Level for Counter-Trend Fakeys
+input bool   InpFakeyRequireKeyLevel= true;  // Require Key S/R Level for Counter-Trend / Range Fakeys
 
 //--- 7. EXITS & TAKE PROFIT
 input group "=== 7. Take Profit & Exits ==="
@@ -208,8 +209,8 @@ input double InpRsiOverbought      = 70.0;   // RSI Overbought Level
 input double InpRsiOversold        = 30.0;   // RSI Oversold Level
 input ENUM_VSA_FILTER_MODE InpVsaFilter = VSA_TEST_AND_CLIMAX; // Volume Spread Analysis Mode
 input int    InpVsaMaPeriod        = 20;     // VSA Volume Moving Average Lookback
-input double InpVsaHighMultiplier  = 1.7;     // VSA High Volume Multiplier
-input double InpVsaLowMultiplier   = 0.8;     // VSA Low Volume Multiplier
+input double InpVsaHighMultiplier  = 1.7;    // VSA High Volume Multiplier
+input double InpVsaLowMultiplier   = 0.8;    // VSA Low Volume Multiplier
 input bool   InpUseHtfPoi          = true;   // Layer HTF Order Blocks / Imbalance POI
 input ENUM_TIMEFRAMES InpHtfPoiTf  = PERIOD_D1; // HTF POI Timeframe
 input double InpPoiMinImbalanceAtr = 1.2;    // Min Impulse Imbalance Multiplier (x HTF ATR)
@@ -247,6 +248,37 @@ SPositionTracker  m_trackedPositions[];
 SOCOPendingPair   m_ocoPairs[];
 SProcessedSignal  m_processedSignals[];
 SPointOfInterest  m_htfPois[];
+
+//+------------------------------------------------------------------+
+//| Forward Declarations                                             |
+//+------------------------------------------------------------------+
+void              UpdateSwingsAndStructure();
+void              UpdateSRZones();
+ENUM_MARKET_TREND DetectMarketTrend();
+bool              IsCandleInteractingWithSR(const MqlRates &candle, bool forBuy, bool &isFlippedLevel);
+bool              IsTesting50PercentSwingRetrace(const MqlRates &candle, bool forBuy);
+bool              ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey = false);
+bool              EvaluatePinBar(const MqlRates &rates[], int i, bool &isBullish, bool &isBearish);
+bool              EvaluateInsideBarStructure(const MqlRates &rates[], int i, int &motherShift, int &insideCount);
+bool              EvaluateFakey(const MqlRates &rates[], int i, bool &isBullFakey, bool &isBearFakey, double &extremePrice);
+bool              CalculateStrictLotSize(double entryPrice, double slPrice, double &outLotSize);
+bool              ValidateBrokerDistance(double orderPrice, double slPrice, double tpPrice);
+double            CalculateTakeProfit(double entryPrice, double slPrice, bool isBuy);
+bool              ExecutePinBarOrder(const MqlRates &pin, bool isBuy);
+bool              ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy);
+bool              ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideCount, ENUM_MARKET_TREND trend);
+void              ManageActivePositions();
+void              ManageOCOPendingPairs();
+void              RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup);
+int               FindTrackedPositionIndex(ulong ticket);
+bool              IsSignalProcessed(datetime barTime, string key);
+void              RecordSignalProcessed(datetime barTime, string key);
+void              CleanExpiredPendingOrders();
+bool              HasOpenPosition();
+bool              ValidateVsaCondition(int shift, bool forBuy);
+void              ScanHtfPois();
+bool              IsCandleInteractingWithHtfPoi(const MqlRates &candle, bool forBuy);
+void              DrawSignalMarker(datetime time, double price, string label, color clr, bool isBuy);
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -395,17 +427,21 @@ void OnTick()
          string sigKey = StringFormat("%s_PINBAR_%s", TimeToString(signalBarTime), isBullPin ? "BUY" : "SELL");
          if(!IsSignalProcessed(signalBarTime, sigKey))
          {
-            if(isBullPin && ValidateConfluence(rates[1], true, trend))
+            if(isBullPin && ValidateConfluence(rates[1], true, trend, false))
             {
-               ExecutePinBarOrder(rates[1], true);
-               RecordSignalProcessed(signalBarTime, sigKey);
-               return;
+               if(ExecutePinBarOrder(rates[1], true))
+               {
+                  RecordSignalProcessed(signalBarTime, sigKey);
+                  return;
+               }
             }
-            else if(isBearPin && ValidateConfluence(rates[1], false, trend))
+            else if(isBearPin && ValidateConfluence(rates[1], false, trend, false))
             {
-               ExecutePinBarOrder(rates[1], false);
-               RecordSignalProcessed(signalBarTime, sigKey);
-               return;
+               if(ExecutePinBarOrder(rates[1], false))
+               {
+                  RecordSignalProcessed(signalBarTime, sigKey);
+                  return;
+               }
             }
          }
       }
@@ -421,17 +457,21 @@ void OnTick()
          string sigKey = StringFormat("%s_FAKEY_%s", TimeToString(signalBarTime), isBullFakey ? "BUY" : "SELL");
          if(!IsSignalProcessed(signalBarTime, sigKey))
          {
-            if(isBullFakey && ValidateConfluence(rates[1], true, trend))
+            if(isBullFakey && ValidateConfluence(rates[1], true, trend, true))
             {
-               ExecuteFakeyOrder(rates[1], extremePrice, true);
-               RecordSignalProcessed(signalBarTime, sigKey);
-               return;
+               if(ExecuteFakeyOrder(rates[1], extremePrice, true))
+               {
+                  RecordSignalProcessed(signalBarTime, sigKey);
+                  return;
+               }
             }
-            else if(isBearFakey && ValidateConfluence(rates[1], false, trend))
+            else if(isBearFakey && ValidateConfluence(rates[1], false, trend, true))
             {
-               ExecuteFakeyOrder(rates[1], extremePrice, false);
-               RecordSignalProcessed(signalBarTime, sigKey);
-               return;
+               if(ExecuteFakeyOrder(rates[1], extremePrice, false))
+               {
+                  RecordSignalProcessed(signalBarTime, sigKey);
+                  return;
+               }
             }
          }
       }
@@ -447,9 +487,11 @@ void OnTick()
          string sigKey = StringFormat("%s_INSIDEBAR_M%s", TimeToString(signalBarTime), TimeToString(rates[motherShift].time));
          if(!IsSignalProcessed(signalBarTime, sigKey))
          {
-            ExecuteInsideBarSetup(rates, motherShift, insideCount, trend);
-            RecordSignalProcessed(signalBarTime, sigKey);
-            return;
+            if(ExecuteInsideBarSetup(rates, motherShift, insideCount, trend))
+            {
+               RecordSignalProcessed(signalBarTime, sigKey);
+               return;
+            }
          }
       }
    }
@@ -543,7 +585,7 @@ ENUM_MARKET_TREND DetectMarketTrend()
       if(total < 4) return TREND_RANGE;
 
       // Extract the 2 most recent confirmed highs and 2 most recent confirmed lows
-      SSwingPivot high0, high1, low0, low1;
+      SSwingPivot high0 = {}, high1 = {}, low0 = {}, low1 = {};
       bool h0 = false, h1 = false, l0 = false, l1 = false;
 
       for(int i = 0; i < total; i++)
@@ -604,6 +646,9 @@ void UpdateSRZones()
    // Cluster nearby swing pivots into horizontal price bands
    for(int i = 0; i < totalSwings; i++)
    {
+      // Respect configured historical S/R lookback bars
+      if(InpSRLookbackBars > 0 && m_swings[i].barShift > InpSRLookbackBars) continue;
+
       double refPrice = m_swings[i].price;
       bool matched = false;
 
@@ -702,7 +747,6 @@ bool IsCandleInteractingWithSR(const MqlRates &candle, bool forBuy, bool &isFlip
 
       if(forBuy && m_srZones[z].isSupport)
       {
-         // Candle low dipped into support zone, or body rejects it
          if(candle.low <= m_srZones[z].priceTop && candle.high >= m_srZones[z].priceBottom)
          {
             isFlippedLevel = m_srZones[z].isFlipped;
@@ -711,7 +755,6 @@ bool IsCandleInteractingWithSR(const MqlRates &candle, bool forBuy, bool &isFlip
       }
       else if(!forBuy && m_srZones[z].isResistance)
       {
-         // Candle high pierced resistance zone, or body rejects it
          if(candle.high >= m_srZones[z].priceBottom && candle.low <= m_srZones[z].priceTop)
          {
             isFlippedLevel = m_srZones[z].isFlipped;
@@ -728,26 +771,38 @@ bool IsCandleInteractingWithSR(const MqlRates &candle, bool forBuy, bool &isFlip
 //+------------------------------------------------------------------+
 bool IsTesting50PercentSwingRetrace(const MqlRates &candle, bool forBuy)
 {
-   if(!InpUse50SwingRetrace) return true;
+   if(!InpUse50SwingRetrace) return true; // Confluence not required by configuration
 
    int total = ArraySize(m_swings);
-   if(total < 2) return true;
+   if(total < 2) return false; // CRITICAL: Insufficient swings = NO confluence
 
    // Find the most recent opposing swing pair
-   SSwingPivot lastHigh, lastLow;
+   SSwingPivot lastHigh = {}, lastLow = {};
    bool foundHigh = false, foundLow = false;
 
    for(int i = 0; i < total; i++)
    {
       if(m_swings[i].isHigh && !foundHigh) { lastHigh = m_swings[i]; foundHigh = true; }
-      if(!m_swings[i].isHigh && !foundLow) { lastLow  = m_swings[i]; foundLow  = true; }
+      if(!m_swings[i].isHigh && !foundLow)  { lastLow  = m_swings[i]; foundLow  = true; }
       if(foundHigh && foundLow) break;
    }
 
-   if(!foundHigh || !foundLow) return true;
+   if(!foundHigh || !foundLow) return false; // Insufficient data = reject
+
+   // CRITICAL: Chronological direction verification
+   // Bullish impulse: Low occurred first (older, lower time), High occurred second (newer, higher time)
+   if(forBuy && (lastLow.time >= lastHigh.time))
+   {
+      return false; // Not a valid upward impulse wave
+   }
+   // Bearish impulse: High occurred first (older, lower time), Low occurred second (newer, higher time)
+   if(!forBuy && (lastHigh.time >= lastLow.time))
+   {
+      return false; // Not a valid downward impulse wave
+   }
 
    double swingRange = MathAbs(lastHigh.price - lastLow.price);
-   if(swingRange <= (5.0 * m_pipSize)) return true;
+   if(swingRange <= (5.0 * m_pipSize)) return false;
 
    double mid50Price = (lastHigh.price + lastLow.price) * 0.5;
    double tolerance  = InpSwing50TolerancePips * m_pipSize;
@@ -765,22 +820,37 @@ bool IsTesting50PercentSwingRetrace(const MqlRates &candle, bool forBuy)
 //| CONFLUENCE ENGINE VALIDATION (PDF Pages 64-70)                   |
 //| T.T.L.F: Trend, Level, Signal, 50% Retracement                   |
 //+------------------------------------------------------------------+
-bool ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend)
+bool ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey)
 {
-   // 1. Trend Alignment Check
+   // 1. Horizontal S/R Level Interaction Check
+   bool isFlipped = false;
+   bool levelValid = IsCandleInteractingWithSR(candle, forBuy, isFlipped);
+
+   // 2. Trend Alignment Check
    bool trendValid = false;
    if(forBuy)  trendValid = (trend == TREND_BULLISH || trend == TREND_RANGE);
    if(!forBuy) trendValid = (trend == TREND_BEARISH || trend == TREND_RANGE);
+
+   // Special PDF Rule (Page 92): Counter-trend Fakeys are valid ONLY at confirmed Key Levels
+   if(isFakey)
+   {
+      bool isCounterTrend = (forBuy && trend == TREND_BEARISH) || (!forBuy && trend == TREND_BULLISH);
+      if((isCounterTrend || trend == TREND_RANGE) && InpFakeyRequireKeyLevel)
+      {
+         if(!levelValid)
+         {
+            if(InpEnableDebugLog) Print("[Fakey Rejected] Counter-trend or range fakey requires a confirmed Key S/R level.");
+            return false;
+         }
+         trendValid = true; // Key level satisfies confluence for Fakey reversal
+      }
+   }
 
    if(!trendValid)
    {
       if(InpEnableDebugLog) Print("[Confluence Failed] Setup against dominant market structure.");
       return false;
    }
-
-   // 2. Horizontal S/R Level Interaction Check
-   bool isFlipped = false;
-   bool levelValid = IsCandleInteractingWithSR(candle, forBuy, isFlipped);
 
    // 3. 50% Swing Retracement Confluence Check
    bool swing50Valid = IsTesting50PercentSwingRetrace(candle, forBuy);
@@ -1030,7 +1100,7 @@ bool ValidateBrokerDistance(double orderPrice, double slPrice, double tpPrice)
 //+------------------------------------------------------------------+
 //| EXECUTION: PIN BAR ORDER                                         |
 //+------------------------------------------------------------------+
-void ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
+bool ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
 {
    double slPrice = 0.0;
    double entryPrice = 0.0;
@@ -1045,14 +1115,17 @@ void ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
       if(InpPinEntryMode == PIN_ENTRY_MARKET_ON_CLOSE)
       {
          entryPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, true);
 
-         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          if(m_trade.Buy(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " PinBar_Buy"))
          {
-            RegisterPositionTrack(m_trade.ResultOrder(), entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "PinBar_Buy");
+            ulong posTicket = m_trade.ResultDeal();
+            if(posTicket == 0) posTicket = m_trade.ResultOrder();
+            RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "PinBar_Buy");
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, pin.low, "Pin Buy", clrLimeGreen, true);
+            return true;
          }
       }
       else // 50% Limit Entry (PDF Page 62)
@@ -1060,18 +1133,24 @@ void ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          entryPrice = pin.low + ((pin.high - pin.low) * 0.50);
          double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
-         // Validate limit order is placed below current Ask
-         if(entryPrice >= currentAsk) entryPrice = currentAsk - (m_point * 10);
+         // CRITICAL: Reject order if price has already crossed past 50% level
+         // Never silently modify entry away from 50% (Prompt Section 11)
+         if(entryPrice >= currentAsk)
+         {
+            if(InpEnableDebugLog) PrintFormat("[PinBar 50%% Rejected] Current Ask (%f) is at/below 50%% entry (%f). Strategy rejects modified price.", currentAsk, entryPrice);
+            return false;
+         }
 
-         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, true);
 
-         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          datetime expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
 
          if(m_trade.BuyLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " Pin_50_Limit"))
          {
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, entryPrice, "50% BuyLimit", clrLimeGreen, true);
+            return true;
          }
       }
    }
@@ -1082,14 +1161,17 @@ void ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
       if(InpPinEntryMode == PIN_ENTRY_MARKET_ON_CLOSE)
       {
          entryPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, false);
 
-         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          if(m_trade.Sell(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " PinBar_Sell"))
          {
-            RegisterPositionTrack(m_trade.ResultOrder(), entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "PinBar_Sell");
+            ulong posTicket = m_trade.ResultDeal();
+            if(posTicket == 0) posTicket = m_trade.ResultOrder();
+            RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "PinBar_Sell");
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, pin.high, "Pin Sell", clrCrimson, false);
+            return true;
          }
       }
       else // 50% Limit Entry (PDF Page 62)
@@ -1097,27 +1179,33 @@ void ExecutePinBarOrder(const MqlRates &pin, bool isBuy)
          entryPrice = pin.high - ((pin.high - pin.low) * 0.50);
          double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
 
-         // Validate limit order is placed above current Bid
-         if(entryPrice <= currentBid) entryPrice = currentBid + (m_point * 10);
+         // CRITICAL: Reject order if price has already crossed past 50% level
+         if(entryPrice <= currentBid)
+         {
+            if(InpEnableDebugLog) PrintFormat("[PinBar 50%% Rejected] Current Bid (%f) is at/above 50%% entry (%f). Strategy rejects modified price.", currentBid, entryPrice);
+            return false;
+         }
 
-         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+         if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
          tpPrice = CalculateTakeProfit(entryPrice, slPrice, false);
 
-         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+         if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
          datetime expiry = TimeCurrent() + (InpPinLimitExpiryBars * PeriodSeconds(_Period));
 
          if(m_trade.SellLimit(lot, entryPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " Pin_50_Limit"))
          {
             if(InpDrawChartObjects) DrawSignalMarker(pin.time, entryPrice, "50% SellLimit", clrCrimson, false);
+            return true;
          }
       }
    }
+   return false;
 }
 
 //+------------------------------------------------------------------+
 //| EXECUTION: FAKEY ORDER                                           |
 //+------------------------------------------------------------------+
-void ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy)
+bool ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy)
 {
    double lot = 0.0;
    string modeTag = (InpStrategyMode == MODE_BOOK_EXACT) ? "[BOOK_EXACT]" : "[ENHANCED]";
@@ -1126,36 +1214,43 @@ void ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtreme, bool isBuy
    {
       double entryPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       double slPrice    = falseBreakExtreme - (InpStopLossBufferPips * m_pipSize);
-      if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+      if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
       double tpPrice    = CalculateTakeProfit(entryPrice, slPrice, true);
 
-      if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+      if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
       if(m_trade.Buy(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " Fakey_Buy"))
       {
-         RegisterPositionTrack(m_trade.ResultOrder(), entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "Fakey_Buy");
+         ulong posTicket = m_trade.ResultDeal();
+         if(posTicket == 0) posTicket = m_trade.ResultOrder();
+         RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_BUY, "Fakey_Buy");
          if(InpDrawChartObjects) DrawSignalMarker(bar.time, bar.low, "Fakey Buy", clrLimeGreen, true);
+         return true;
       }
    }
    else
    {
       double entryPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       double slPrice    = falseBreakExtreme + (InpStopLossBufferPips * m_pipSize);
-      if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return;
+      if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
       double tpPrice    = CalculateTakeProfit(entryPrice, slPrice, false);
 
-      if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return;
+      if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
       if(m_trade.Sell(lot, _Symbol, entryPrice, slPrice, tpPrice, modeTag + " Fakey_Sell"))
       {
-         RegisterPositionTrack(m_trade.ResultOrder(), entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "Fakey_Sell");
+         ulong posTicket = m_trade.ResultDeal();
+         if(posTicket == 0) posTicket = m_trade.ResultOrder();
+         RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, POSITION_TYPE_SELL, "Fakey_Sell");
          if(InpDrawChartObjects) DrawSignalMarker(bar.time, bar.high, "Fakey Sell", clrCrimson, false);
+         return true;
       }
    }
+   return false;
 }
 
 //+------------------------------------------------------------------+
-//| EXECUTION: INSIDE BAR SETUP WITH OCO PENDING MANAGEMENT          |
+//| EXECUTION: INSIDE BAR SETUP WITH RESTART-SAFE OCO MANAGEMENT     |
 //+------------------------------------------------------------------+
-void ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideCount, ENUM_MARKET_TREND trend)
+bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideCount, ENUM_MARKET_TREND trend)
 {
    const MqlRates mother = rates[motherShift];
    datetime expiry = TimeCurrent() + (InpIBOrderExpiryBars * PeriodSeconds(_Period));
@@ -1165,24 +1260,31 @@ void ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
    bool allowBuy  = false;
    bool allowSell = false;
 
-   // Check Continuation vs Reversal conditions
+   // 1. Continuation Mode (Evaluated independently)
    if(InpIBContinuationOnly)
    {
       if(trend == TREND_BULLISH) allowBuy  = true;
       if(trend == TREND_BEARISH) allowSell = true;
    }
-   else if(InpIBReversalAtLevels)
+
+   // 2. Reversal Mode (Evaluated independently - Prompt Section 14)
+   if(InpIBReversalAtLevels)
    {
       bool isFlipped = false;
       if(IsCandleInteractingWithSR(mother, true, isFlipped))  allowBuy  = true;
       if(IsCandleInteractingWithSR(mother, false, isFlipped)) allowSell = true;
    }
-   else // Range / Dual breakout
+
+   // 3. Fallback if both modes disabled: allow dual breakout
+   if(!InpIBContinuationOnly && !InpIBReversalAtLevels)
    {
       allowBuy  = true;
       allowSell = true;
    }
 
+   if(!allowBuy && !allowSell) return false;
+
+   string pairTag = StringFormat("IB_OCO_%I64d", (long)mother.time);
    ulong buyTicket = 0, sellTicket = 0;
 
    // 1. Buy Stop Order
@@ -1196,7 +1298,8 @@ void ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          double tpPrice = CalculateTakeProfit(buyPrice, slPrice, true);
          if(ValidateBrokerDistance(buyPrice, slPrice, tpPrice))
          {
-            if(m_trade.BuyStop(lot, buyPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " IB_BuyStop"))
+            string comment = StringFormat("%s IB_BuyStop [%s]", modeTag, pairTag);
+            if(m_trade.BuyStop(lot, buyPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, comment))
             {
                buyTicket = m_trade.ResultOrder();
             }
@@ -1215,7 +1318,8 @@ void ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          double tpPrice = CalculateTakeProfit(sellPrice, slPrice, false);
          if(ValidateBrokerDistance(sellPrice, slPrice, tpPrice))
          {
-            if(m_trade.SellStop(lot, sellPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, modeTag + " IB_SellStop"))
+            string comment = StringFormat("%s IB_SellStop [%s]", modeTag, pairTag);
+            if(m_trade.SellStop(lot, sellPrice, _Symbol, slPrice, tpPrice, ORDER_TIME_SPECIFIED, expiry, comment))
             {
                sellTicket = m_trade.ResultOrder();
             }
@@ -1223,16 +1327,23 @@ void ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
       }
    }
 
-   // Register Dual Orders into OCO pair if both were placed
-   if(buyTicket > 0 && sellTicket > 0)
+   // Register into RAM pair tracker
+   if(buyTicket > 0 || sellTicket > 0)
    {
-      int ocoSz = ArraySize(m_ocoPairs);
-      ArrayResize(m_ocoPairs, ocoSz + 1);
-      m_ocoPairs[ocoSz].buyStopTicket  = buyTicket;
-      m_ocoPairs[ocoSz].sellStopTicket = sellTicket;
-      m_ocoPairs[ocoSz].placedTime     = TimeCurrent();
-      m_ocoPairs[ocoSz].isActive       = true;
+      if(buyTicket > 0 && sellTicket > 0)
+      {
+         int ocoSz = ArraySize(m_ocoPairs);
+         ArrayResize(m_ocoPairs, ocoSz + 1);
+         m_ocoPairs[ocoSz].buyStopTicket  = buyTicket;
+         m_ocoPairs[ocoSz].sellStopTicket = sellTicket;
+         m_ocoPairs[ocoSz].placedTime     = TimeCurrent();
+         m_ocoPairs[ocoSz].isActive       = true;
+         m_ocoPairs[ocoSz].pairTag        = pairTag;
+      }
+      return true;
    }
+
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -1274,7 +1385,7 @@ double CalculateTakeProfit(double entryPrice, double slPrice, bool isBuy)
 
 //+------------------------------------------------------------------+
 //| POSITION MANAGEMENT: BREAK-EVEN & TRAILING STOP                  |
-//| Preserves Initial Risk Constant - Never Recalculates from Move SL|
+//| Preserves Initial Risk Constant via Persistent Global Variables  |
 //+------------------------------------------------------------------+
 void ManageActivePositions()
 {
@@ -1286,10 +1397,26 @@ void ManageActivePositions()
       ulong ticket = m_position.Ticket();
       int trackIdx = FindTrackedPositionIndex(ticket);
 
-      // If not yet tracked, register now
-      if(trackIdx < 0)
+      // Persistent Storage Retrieval (Survives EA Restarts)
+      string gvName = StringFormat("PA_INIT_SL_%I64u", ticket);
+      double initialSL = 0.0;
+
+      if(trackIdx >= 0)
       {
-         RegisterPositionTrack(ticket, m_position.PriceOpen(), m_position.StopLoss(), 
+         initialSL = m_trackedPositions[trackIdx].initialSL;
+      }
+      else
+      {
+         if(GlobalVariableCheck(gvName))
+         {
+            initialSL = GlobalVariableGet(gvName);
+         }
+         else
+         {
+            initialSL = m_position.StopLoss();
+            GlobalVariableSet(gvName, initialSL);
+         }
+         RegisterPositionTrack(ticket, m_position.PriceOpen(), initialSL, 
                                m_position.TakeProfit(), m_position.PositionType(), m_position.Comment());
          trackIdx = FindTrackedPositionIndex(ticket);
          if(trackIdx < 0) continue;
@@ -1374,43 +1501,67 @@ void ManageActivePositions()
 }
 
 //+------------------------------------------------------------------+
-//| MANAGE OCO PENDING ORDERS                                        |
+//| MANAGE OCO PENDING ORDERS (Survives Restarts via Tag Search)     |
 //+------------------------------------------------------------------+
 void ManageOCOPendingPairs()
 {
+   // 1. In-Memory Pairs Scan
    int total = ArraySize(m_ocoPairs);
    for(int i = total - 1; i >= 0; i--)
    {
       if(!m_ocoPairs[i].isActive) continue;
 
-      bool buyFilled = false;
-      bool sellFilled = false;
-
-      // Check if buy stop filled into a position
-      if(PositionSelectByTicket(m_ocoPairs[i].buyStopTicket)) buyFilled = true;
-      if(PositionSelectByTicket(m_ocoPairs[i].sellStopTicket)) sellFilled = true;
+      bool buyFilled  = PositionSelectByTicket(m_ocoPairs[i].buyStopTicket);
+      bool sellFilled = PositionSelectByTicket(m_ocoPairs[i].sellStopTicket);
 
       if(buyFilled)
       {
-         // Cancel opposite sell stop
          if(OrderSelect(m_ocoPairs[i].sellStopTicket))
          {
             m_trade.OrderDelete(m_ocoPairs[i].sellStopTicket);
-            PrintFormat("[OCO] Buy order #%I64u filled. Canceled opposite SellStop #%I64u", 
+            PrintFormat("[OCO] Buy order #%I64u filled. Deleted opposite SellStop #%I64u", 
                         m_ocoPairs[i].buyStopTicket, m_ocoPairs[i].sellStopTicket);
          }
          m_ocoPairs[i].isActive = false;
       }
       else if(sellFilled)
       {
-         // Cancel opposite buy stop
          if(OrderSelect(m_ocoPairs[i].buyStopTicket))
          {
             m_trade.OrderDelete(m_ocoPairs[i].buyStopTicket);
-            PrintFormat("[OCO] Sell order #%I64u filled. Canceled opposite BuyStop #%I64u", 
+            PrintFormat("[OCO] Sell order #%I64u filled. Deleted opposite BuyStop #%I64u", 
                         m_ocoPairs[i].sellStopTicket, m_ocoPairs[i].buyStopTicket);
          }
          m_ocoPairs[i].isActive = false;
+      }
+   }
+
+   // 2. Terminal State Recovery Scan (Across Restarts)
+   for(int p = PositionsTotal() - 1; p >= 0; p--)
+   {
+      if(!m_position.SelectByIndex(p)) continue;
+      if(m_position.Symbol() != _Symbol || m_position.Magic() != InpMagicNumber) continue;
+
+      string posComment = m_position.Comment();
+      int tagPos = StringFind(posComment, "IB_OCO_");
+      if(tagPos < 0) continue;
+
+      // Extract OCO tag
+      string ocoTag = StringSubstr(posComment, tagPos, 20);
+
+      // Check if an opposing pending order with this OCO tag is still open
+      for(int o = OrdersTotal() - 1; o >= 0; o--)
+      {
+         if(!m_order.SelectByIndex(o)) continue;
+         if(m_order.Symbol() == _Symbol && m_order.Magic() == InpMagicNumber)
+         {
+            if(StringFind(m_order.Comment(), ocoTag) >= 0)
+            {
+               m_trade.OrderDelete(m_order.Ticket());
+               PrintFormat("[OCO Recovery] Active position has tag %s. Canceled remaining pending order #%I64u", 
+                           ocoTag, m_order.Ticket());
+            }
+         }
       }
    }
 }
@@ -1432,6 +1583,10 @@ void RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, doubl
    m_trackedPositions[sz].type              = type;
    m_trackedPositions[sz].setupName         = setup;
    m_trackedPositions[sz].breakEvenApplied  = false;
+
+   // Persist to Terminal Global Variable
+   string gvName = StringFormat("PA_INIT_SL_%I64u", ticket);
+   GlobalVariableSet(gvName, slPrice);
 }
 
 int FindTrackedPositionIndex(ulong ticket)
