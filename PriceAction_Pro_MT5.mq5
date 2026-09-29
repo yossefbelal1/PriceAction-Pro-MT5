@@ -19,8 +19,43 @@
 //+------------------------------------------------------------------+
 enum ENUM_STRATEGY_MODE
 {
-   MODE_BOOK_EXACT = 0, // Mode A: Pure PDF Book Strategy (No EMA, RSI, VSA, or OB/FVG)
-   MODE_ENHANCED   = 1  // Mode B: Enhanced Strategy (Optional Technical Filters Layered On Top)
+   MODE_BOOK_EXACT              = 0, // Mode A: Pure PDF Book Strategy (No EMA, RSI, VSA, or OB/FVG)
+   MODE_ENHANCED                = 1, // Mode B: Enhanced Strategy (Optional Technical Filters Layered On Top)
+   MODE_SCALPING_TREND_MOMENTUM = 2  // Mode C: Scalping Trend-Momentum (H2/L2, Second Entry, Second Break on M5)
+};
+
+enum ENUM_SCALP_STATE
+{
+   SCALP_STATE_IDLE                 = 0, // SCALP_NO_SETUP
+   SCALP_STATE_TREND_DETECTED       = 1, // Trend confirmed by micro HH/HL or LH/LL
+   SCALP_STATE_PULLBACK             = 2, // Orderly counter-trend pullback underway
+   SCALP_STATE_FIRST_ATTEMPT        = 3, // H1 (uptrend) or L1 (downtrend) triggered
+   SCALP_STATE_FIRST_ATTEMPT_FAILED = 4, // H1/L1 failed to resume trend, pullback resumes
+   SCALP_STATE_SECOND_ENTRY_READY   = 5, // Second attempt (H2/L2) forming, awaiting trigger
+   SCALP_STATE_TRIGGERED            = 6, // Second Break / Trigger bar confirmed
+   SCALP_STATE_IN_POSITION          = 7, // Active scalping position opened
+   SCALP_STATE_EXIT_MANAGEMENT      = 8, // Managing position (trailing, BE, dynamic exit)
+   SCALP_STATE_INVALIDATED          = 9  // Setup invalidated (structure broken, timeout)
+};
+
+enum ENUM_SCALP_ENTRY_TYPE
+{
+   SCALP_ENTRY_MARKET_ON_CONFIRMATION = 0, // Market entry upon confirmed signal bar close
+   SCALP_ENTRY_STOP_ON_TRIGGER_LEVEL  = 1  // Stop order placed at trigger level
+};
+
+enum ENUM_SCALP_EXIT_REASON
+{
+   SCALP_EXIT_NONE                  = 0,
+   SCALP_EXIT_STOP_LOSS             = 1,
+   SCALP_EXIT_TAKE_PROFIT           = 2,
+   SCALP_EXIT_BREAK_EVEN            = 3,
+   SCALP_EXIT_OPPOSITE_PA_REVERSAL  = 4,
+   SCALP_EXIT_STRUCTURE_BREAK       = 5,
+   SCALP_EXIT_MOMENTUM_STALL        = 6,
+   SCALP_EXIT_SR_WALL_REACHED       = 7,
+   SCALP_EXIT_SESSION_END           = 8,
+   SCALP_EXIT_TRAILING_STOP         = 9
 };
 
 enum ENUM_MARKET_TREND
@@ -125,6 +160,36 @@ struct SPointOfInterest
    string   objName;
 };
 
+struct SScalpStateMachine
+{
+   ENUM_SCALP_STATE  state;
+   int               trendDirection;      // +1 Bull, -1 Bear, 0 Range
+   double            invalidationLevel;   // Prior HL for bull, prior LH for bear
+   double            impulseExtreme;      // Swing high for bull, swing low for bear
+   datetime          impulseTime;
+   int               pullbackStartShift;
+   double            pullbackExtreme;     // Lowest low of pullback (bull) or highest high (bear)
+   datetime          pullbackExtremeTime;
+   int               pullbackBarCount;
+   int               h1Shift;
+   double            h1TriggerPrice;
+   datetime          h1Time;
+   int               h2Shift;
+   double            h2TriggerPrice;
+   datetime          h2Time;
+   int               l1Shift;
+   double            l1TriggerPrice;
+   datetime          l1Time;
+   int               l2Shift;
+   double            l2TriggerPrice;
+   datetime          l2Time;
+   double            entryPrice;
+   double            stopLossPrice;
+   double            takeProfitPrice;
+   string            setupDescription;
+   datetime          setupTime;
+};
+
 //+------------------------------------------------------------------+
 //| INPUT PARAMETERS                                                 |
 //+------------------------------------------------------------------+
@@ -224,6 +289,50 @@ input int    InpSlippagePoints     = 30;       // Max Slippage (Points)
 input bool   InpEnableDebugLog     = true;     // Detailed Diagnostic Logging
 input bool   InpDrawChartObjects   = true;     // Draw Visual Swings, S/R Zones, & Setup Markers
 
+//--- 12. SCALPING ARCHITECTURE & PARAMETERS (MODE_SCALPING_TREND_MOMENTUM)
+input group "=== 12. Scalping Architecture (M5 Execution / M15 Context) ==="
+input ENUM_TIMEFRAMES InpScalpExecutionTF       = PERIOD_M5;  // Scalp Execution Timeframe
+input ENUM_TIMEFRAMES InpScalpContextTF         = PERIOD_M15; // Scalp Context Timeframe
+input int             InpScalpPivotStrength    = 2;          // Micro Pivot Strength (Bars Left & Right)
+input int             InpScalpStructureLookback= 50;         // Lookback Bars for Micro Market Structure
+input double          InpScalpMinImpulseAtr    = 1.0;        // Min Trend Impulse Size (Multiples of ATR)
+input int             InpScalpMinSeparationBars= 3;          // Min Separation Bars Between Swing Points
+input bool            InpScalpUseEmaContext    = true;       // Optional 20 EMA Trend Context (Slope & Price Side)
+input int             InpScalpEmaPeriod        = 20;         // EMA Context Period (M5)
+
+input group "=== 13. Scalping Pullback & H2/L2 / Second Break ==="
+input int             InpScalpMaxPullbackBars  = 8;          // Max Allowed Bars in Pullback Before Invalidation
+input int             InpScalpMinPullbackBars  = 2;          // Min Required Bars in Pullback (Orderly Correction)
+input double          InpScalpBreakBufferPoints= 10.0;       // Second Break Trigger Buffer Beyond High/Low (Points)
+input bool            InpScalpRequireSignalBar = true;       // Require Favorable Signal Bar Close (Top/Bottom 33%)
+input bool            InpScalpUseSRProximityFilter = true;   // Filter Entries Too Close to Opposing Major S/R
+input double          InpScalpMinRDistanceToSR = 1.0;        // Min Distance in R Multiples to Nearest Opposing S/R
+
+input group "=== 14. Scalping Volume Confirmation (Secondary Layer) ==="
+input bool            InpScalpUseVolumeConfirm = false;      // Enable Tick Volume Confirmation Layer
+input int             InpScalpVolumeMAPeriod   = 20;         // Volume Moving Average Period
+input double          InpScalpMinRelativeVolume= 1.0;        // Min Trigger Bar Volume Relative to Volume MA
+input double          InpScalpPullbackVolRatio = 0.9;        // Max Pullback Avg Volume Relative to Impulse Avg Volume
+
+input group "=== 15. Scalping Dynamic Exits & Position Management ==="
+input bool            InpScalpDynamicExits     = true;       // Enable Dynamic Price Action Exits
+input bool            InpScalpExitOnOppositeBar= true;       // Exit on Strong Opposite Reversal Candle
+input bool            InpScalpExitOnStructureBreak = true;   // Exit on Micro-Structure Invalidation
+input bool            InpScalpExitOnMomentumStall = true;    // Exit on Momentum Stall (N bars no progress)
+input int             InpScalpStallBars        = 4;          // Consecutive Bars Without New Extreme in Profit
+input double          InpScalpFixedRRFallback  = 2.0;        // Fallback Take Profit Target (R Multiples, 0=None)
+input bool            InpScalpUseTrailing      = true;       // Trailing Stop Behind Prior Bar Extremes
+input double          InpScalpTrailingStartR   = 1.0;        // Start Trailing Stop after Gaining +R
+
+input group "=== 16. Scalping Session & Risk Protections ==="
+input bool            InpScalpUseSessionFilter = true;       // Enable Trading Session Filter
+input int             InpScalpSessionStartHour = 8;          // Session Start Hour (Broker Time, e.g. 08:00 London)
+input int             InpScalpSessionEndHour   = 20;         // Session End Hour (Broker Time, e.g. 20:00 NY Close)
+input int             InpScalpMaxTradesPerDay  = 10;         // Maximum Scalp Trades Allowed Per Day
+input int             InpScalpCooldownBars     = 3;          // Cooldown Closed Bars After Trade Exit
+input double          InpScalpDailyLossLimitPct= 3.0;        // Maximum Daily Loss Percentage (% of Balance)
+input double          InpScalpDailyProfitLockPct= 5.0;       // Daily Profit Target to Lock & Stop Trading (%)
+
 //+------------------------------------------------------------------+
 //| GLOBAL SYSTEM VARIABLES                                          |
 //+------------------------------------------------------------------+
@@ -249,9 +358,34 @@ SOCOPendingPair   m_ocoPairs[];
 SProcessedSignal  m_processedSignals[];
 SPointOfInterest  m_htfPois[];
 
+// Scalping Engine Variables (Mode C)
+SScalpStateMachine   m_scalpState;
+int                  m_hScalpEma         = INVALID_HANDLE;
+int                  m_hScalpAtr         = INVALID_HANDLE;
+int                  m_hScalpVolMa       = INVALID_HANDLE;
+datetime             m_scalpLastBarTime  = 0;
+int                  m_scalpTradesToday  = 0;
+datetime             m_scalpLastTradeDay = 0;
+datetime             m_scalpLastExitTime = 0;
+int                  m_scalpBarsInTrade  = 0;
+double               m_scalpDayStartBalance = 0.0;
+
 //+------------------------------------------------------------------+
 //| Forward Declarations                                             |
 //+------------------------------------------------------------------+
+int               Scalp_OnInit();
+void              Scalp_OnDeinit();
+void              Scalp_OnTick();
+void              Scalp_ManageActivePositions();
+bool              Scalp_DetectMarketStructure(ENUM_TIMEFRAMES tf, SSwingPivot &pivots[], ENUM_MARKET_TREND &trend, double &invalidationLevel, double &impulseExtreme);
+void              Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_TREND m5Trend, double m5Invalidation, double m5ImpulseExtreme, ENUM_MARKET_TREND m15Trend);
+bool              Scalp_CheckSignalConfirmation(const MqlRates &bar, bool isBuy);
+bool              Scalp_CheckSRProximity(double entryPrice, double slPrice, bool isBuy);
+bool              Scalp_CheckVolumeConfirmation(const MqlRates &rates[], int triggerShift, int pullbackStartShift, int pullbackEndShift);
+bool              Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag);
+void              Scalp_ClosePosition(ulong ticket, ENUM_SCALP_EXIT_REASON reason, string detail);
+bool              Scalp_IsSessionAllowed();
+
 void              UpdateSwingsAndStructure();
 void              UpdateSRZones();
 ENUM_MARKET_TREND DetectMarketTrend();
@@ -304,6 +438,12 @@ int OnInit()
    m_point = _Point;
    m_pipSize = (_Digits == 3 || _Digits == 5) ? _Point * 10.0 : _Point;
 
+   // Scalping Mode Dispatch
+   if(InpStrategyMode == MODE_SCALPING_TREND_MOMENTUM)
+   {
+      return Scalp_OnInit();
+   }
+
    // Mode Validation
    if(InpStrategyMode == MODE_BOOK_EXACT)
    {
@@ -351,6 +491,12 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   if(InpStrategyMode == MODE_SCALPING_TREND_MOMENTUM)
+   {
+      Scalp_OnDeinit();
+      return;
+   }
+
    if(m_hFastEma != INVALID_HANDLE) IndicatorRelease(m_hFastEma);
    if(m_hSlowEma != INVALID_HANDLE) IndicatorRelease(m_hSlowEma);
    if(m_hRsi != INVALID_HANDLE)     IndicatorRelease(m_hRsi);
@@ -384,6 +530,12 @@ bool IsNewBar()
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   if(InpStrategyMode == MODE_SCALPING_TREND_MOMENTUM)
+   {
+      Scalp_OnTick();
+      return;
+   }
+
    // 1. Manage Active Positions on every tick (Break-Even & Trailing Stop)
    ManageActivePositions();
 
@@ -2108,5 +2260,1113 @@ void DrawSignalMarker(datetime time, double price, string label, color clr, bool
       ObjectSetInteger(0, textName, OBJPROP_COLOR, clr);
       ObjectSetInteger(0, textName, OBJPROP_FONTSIZE, 9);
    }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: INITIALIZATION                                  |
+//+------------------------------------------------------------------+
+int Scalp_OnInit()
+{
+   Print("==========================================================");
+   Print("[PriceAction_Pro] MODE: SCALPING_TREND_MOMENTUM (M5/M15)");
+   PrintFormat("Execution TF: %s | Context TF: %s", EnumToString(InpScalpExecutionTF), EnumToString(InpScalpContextTF));
+   Print("Lineage: Al Brooks H2/L2 + Mack PATs Second Entry + Volman Second Break");
+   Print("Priority: 1.Market Structure -> 2.Trend Momentum -> 3.Pullback -> 4.H2/L2 FSM -> 5.Signal PA -> 6.Dynamic Exits");
+   Print("==========================================================");
+
+   if(InpScalpUseEmaContext)
+   {
+      m_hScalpEma = iMA(_Symbol, InpScalpExecutionTF, InpScalpEmaPeriod, 0, MODE_EMA, PRICE_CLOSE);
+      if(m_hScalpEma == INVALID_HANDLE)
+      {
+         Print("[Scalp Init Error] Failed to create M5 EMA handle.");
+         return INIT_FAILED;
+      }
+   }
+
+   m_hScalpAtr = iATR(_Symbol, InpScalpExecutionTF, 14);
+   if(m_hScalpAtr == INVALID_HANDLE)
+   {
+      Print("[Scalp Init Error] Failed to create M5 ATR handle.");
+      return INIT_FAILED;
+   }
+
+   ZeroMemory(m_scalpState);
+   m_scalpState.state        = SCALP_STATE_IDLE;
+   m_scalpDayStartBalance    = AccountInfoDouble(ACCOUNT_BALANCE);
+   m_scalpLastTradeDay       = 0;
+   m_scalpTradesToday        = 0;
+   m_scalpLastBarTime        = 0;
+   m_scalpLastExitTime       = 0;
+   m_scalpBarsInTrade        = 0;
+
+   // Pre-populate S/R zones on execution TF
+   UpdateSwingsAndStructure();
+   UpdateSRZones();
+
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: DEINITIALIZATION                                |
+//+------------------------------------------------------------------+
+void Scalp_OnDeinit()
+{
+   if(m_hScalpEma != INVALID_HANDLE) IndicatorRelease(m_hScalpEma);
+   if(m_hScalpAtr != INVALID_HANDLE) IndicatorRelease(m_hScalpAtr);
+   if(m_hScalpVolMa != INVALID_HANDLE) IndicatorRelease(m_hScalpVolMa);
+
+   if(InpDrawChartObjects)
+   {
+      ObjectsDeleteAll(0, "SCALP_");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: SESSION TIME FILTER                             |
+//+------------------------------------------------------------------+
+bool Scalp_IsSessionAllowed()
+{
+   if(!InpScalpUseSessionFilter) return true;
+
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   if(InpScalpSessionStartHour <= InpScalpSessionEndHour)
+   {
+      if(dt.hour < InpScalpSessionStartHour || dt.hour >= InpScalpSessionEndHour)
+         return false;
+   }
+   else
+   {
+      if(dt.hour < InpScalpSessionStartHour && dt.hour >= InpScalpSessionEndHour)
+         return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: NEW BAR DETECTION (EXECUTION TIMEFRAME)         |
+//+------------------------------------------------------------------+
+bool IsNewScalpBar()
+{
+   datetime currentBarTime = iTime(_Symbol, InpScalpExecutionTF, 0);
+   if(currentBarTime != m_scalpLastBarTime)
+   {
+      m_scalpLastBarTime = currentBarTime;
+      return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: MICRO MARKET STRUCTURE & ZERO LOOK-AHEAD PIVOTS |
+//+------------------------------------------------------------------+
+bool Scalp_DetectMarketStructure(ENUM_TIMEFRAMES tf, SSwingPivot &pivots[], ENUM_MARKET_TREND &trend, double &invalidationLevel, double &impulseExtreme)
+{
+   ArrayResize(pivots, 0);
+   trend = TREND_RANGE;
+   invalidationLevel = 0.0;
+   impulseExtreme = 0.0;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   int lookback = MathMax(InpScalpStructureLookback + (InpScalpPivotStrength * 2) + 40, 150);
+   int copied = CopyRates(_Symbol, tf, 0, lookback, rates);
+   if(copied < 30) return false;
+
+   // Scan for confirmed micro-pivots strictly on closed bars
+   // Evaluating Bar 1 requires candidate pivot to be at shift: 1 + InpScalpPivotStrength
+   int scanEnd = MathMin(copied - InpScalpPivotStrength - 1, InpScalpStructureLookback + 30);
+   int lastHighBar = -100;
+   int lastLowBar  = -100;
+
+   for(int i = 1 + InpScalpPivotStrength; i <= scanEnd; i++)
+   {
+      bool isHigh = true;
+      bool isLow  = true;
+
+      for(int b = 1; b <= InpScalpPivotStrength; b++)
+      {
+         if(rates[i].high <= rates[i - b].high || rates[i].high < rates[i + b].high)
+            isHigh = false;
+         if(rates[i].low >= rates[i - b].low || rates[i].low > rates[i + b].low)
+            isLow = false;
+      }
+
+      if(isHigh && (i - lastHighBar) >= InpScalpMinSeparationBars)
+      {
+         int sz = ArraySize(pivots);
+         ArrayResize(pivots, sz + 1);
+         pivots[sz].time      = rates[i].time;
+         pivots[sz].price     = rates[i].high;
+         pivots[sz].barShift  = i;
+         pivots[sz].isHigh    = true;
+         lastHighBar = i;
+      }
+      if(isLow && (i - lastLowBar) >= InpScalpMinSeparationBars)
+      {
+         int sz = ArraySize(pivots);
+         ArrayResize(pivots, sz + 1);
+         pivots[sz].time      = rates[i].time;
+         pivots[sz].price     = rates[i].low;
+         pivots[sz].barShift  = i;
+         pivots[sz].isHigh    = false;
+         lastLowBar = i;
+      }
+   }
+
+   int totalPivots = ArraySize(pivots);
+   if(totalPivots < 4) return false;
+
+   // Find the two most recent swing highs and two most recent swing lows
+   SSwingPivot sh1, sh2, sl1, sl2;
+   ZeroMemory(sh1); ZeroMemory(sh2); ZeroMemory(sl1); ZeroMemory(sl2);
+   int foundHighs = 0, foundLows = 0;
+
+   for(int k = 0; k < totalPivots; k++)
+   {
+      if(pivots[k].isHigh)
+      {
+         if(foundHighs == 0) { sh1 = pivots[k]; foundHighs++; }
+         else if(foundHighs == 1) { sh2 = pivots[k]; foundHighs++; }
+      }
+      else
+      {
+         if(foundLows == 0) { sl1 = pivots[k]; foundLows++; }
+         else if(foundLows == 1) { sl2 = pivots[k]; foundLows++; }
+      }
+      if(foundHighs >= 2 && foundLows >= 2) break;
+   }
+
+   if(foundHighs < 2 || foundLows < 2) return false;
+
+   // Read ATR for impulse size validation
+   double atrVal[1];
+   double atr = (CopyBuffer(m_hScalpAtr, 0, 1, 1, atrVal) > 0 && atrVal[0] > 0.0) ? atrVal[0] : (10.0 * m_point);
+
+   // Bullish Trend: Higher High (SH1 > SH2) and Higher Low (SL1 > SL2)
+   if(sh1.price > sh2.price && sl1.price > sl2.price)
+   {
+      double impulseSize = MathMax(sh1.price - sl1.price, sh1.price - sl2.price);
+      if(impulseSize >= (InpScalpMinImpulseAtr * atr))
+      {
+         // Optional EMA Context Filter on Execution Timeframe
+         if(InpScalpUseEmaContext && tf == InpScalpExecutionTF)
+         {
+            double ema[];
+            ArraySetAsSeries(ema, true);
+            if(CopyBuffer(m_hScalpEma, 0, 1, 2, ema) >= 2)
+            {
+               // ema[0] = Bar 1, ema[1] = Bar 2
+               // Bullish: EMA slope rising (ema[0] > ema[1]) OR close above EMA (rates[1].close >= ema[0])
+               if(rates[1].close < ema[0] && ema[0] <= ema[1])
+               {
+                  trend = TREND_RANGE;
+                  return false;
+               }
+            }
+         }
+         trend = TREND_BULLISH;
+         invalidationLevel = sl1.price; // Most recent Higher Low
+         impulseExtreme    = sh1.price; // Most recent Higher High
+         return true;
+      }
+   }
+   // Bearish Trend: Lower High (SH1 < SH2) and Lower Low (SL1 < SL2)
+   else if(sh1.price < sh2.price && sl1.price < sl2.price)
+   {
+      double impulseSize = MathMax(sl1.price - sh1.price, sl2.price - sh1.price);
+      if(MathAbs(impulseSize) >= (InpScalpMinImpulseAtr * atr))
+      {
+         if(InpScalpUseEmaContext && tf == InpScalpExecutionTF)
+         {
+            double ema[];
+            ArraySetAsSeries(ema, true);
+            if(CopyBuffer(m_hScalpEma, 0, 1, 2, ema) >= 2)
+            {
+               // ema[0] = Bar 1, ema[1] = Bar 2
+               // Bearish: EMA slope falling (ema[0] < ema[1]) OR close below EMA (rates[1].close <= ema[0])
+               if(rates[1].close > ema[0] && ema[0] >= ema[1])
+               {
+                  trend = TREND_RANGE;
+                  return false;
+               }
+            }
+         }
+         trend = TREND_BEARISH;
+         invalidationLevel = sh1.price; // Most recent Lower High
+         impulseExtreme    = sl1.price; // Most recent Lower Low
+         return true;
+      }
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: SIGNAL BAR GEOMETRY CONFIRMATION                |
+//+------------------------------------------------------------------+
+bool Scalp_CheckSignalConfirmation(const MqlRates &bar, bool isBuy)
+{
+   if(!InpScalpRequireSignalBar) return true;
+
+   double rng = bar.high - bar.low;
+   if(rng <= 0.0) return false;
+
+   if(isBuy)
+   {
+      double closeRatio = (bar.close - bar.low) / rng;
+      double lowerWickRatio = (MathMin(bar.open, bar.close) - bar.low) / rng;
+      // Close in top 35% or strong lower rejection wick (>= 40%)
+      return (closeRatio >= 0.65 || lowerWickRatio >= 0.40);
+   }
+   else
+   {
+      double closeRatio = (bar.high - bar.close) / rng;
+      double upperWickRatio = (bar.high - MathMax(bar.open, bar.close)) / rng;
+      // Close in bottom 35% or strong upper rejection wick (>= 40%)
+      return (closeRatio >= 0.65 || upperWickRatio >= 0.40);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: KEY S/R PROXIMITY CHECK (>= 1.0R ROOM)          |
+//+------------------------------------------------------------------+
+bool Scalp_CheckSRProximity(double entryPrice, double slPrice, bool isBuy)
+{
+   if(!InpScalpUseSRProximityFilter) return true;
+
+   double rDist = MathAbs(entryPrice - slPrice);
+   if(rDist <= 0.0) return true;
+
+   double minRequiredRoom = rDist * InpScalpMinRDistanceToSR;
+   int totalZones = ArraySize(m_srZones);
+
+   for(int i = 0; i < totalZones; i++)
+   {
+      if(isBuy)
+      {
+         // Nearest opposing resistance above entry
+         if(m_srZones[i].priceBottom > entryPrice && (m_srZones[i].priceBottom - entryPrice) < minRequiredRoom)
+         {
+            if(InpEnableDebugLog)
+               PrintFormat("[Scalp SR Filter] Buy blocked: Resistance at %.5f within %.1f pts (Need %.1f pts)",
+                           m_srZones[i].priceBottom, (m_srZones[i].priceBottom - entryPrice) / m_point, minRequiredRoom / m_point);
+            return false;
+         }
+      }
+      else
+      {
+         // Nearest opposing support below entry
+         if(m_srZones[i].priceTop < entryPrice && (entryPrice - m_srZones[i].priceTop) < minRequiredRoom)
+         {
+            if(InpEnableDebugLog)
+               PrintFormat("[Scalp SR Filter] Sell blocked: Support at %.5f within %.1f pts (Need %.1f pts)",
+                           m_srZones[i].priceTop, (entryPrice - m_srZones[i].priceTop) / m_point, minRequiredRoom / m_point);
+            return false;
+         }
+      }
+   }
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: VOLUME CONFIRMATION (SECONDARY LAYER)           |
+//+------------------------------------------------------------------+
+bool Scalp_CheckVolumeConfirmation(const MqlRates &rates[], int triggerShift, int pullbackStartShift, int pullbackEndShift)
+{
+   if(!InpScalpUseVolumeConfirm) return true;
+
+   int arrayCount = ArraySize(rates);
+   if(arrayCount < 25) return true;
+
+   // Calculate 20-bar baseline average tick volume
+   long baselineSum = 0;
+   int baseBars = 0;
+   for(int s = 1; s <= InpScalpVolumeMAPeriod && s < arrayCount; s++)
+   {
+      baselineSum += rates[s].tick_volume;
+      baseBars++;
+   }
+   double avgBaseVol = (baseBars > 0) ? (double)baselineSum / baseBars : 1.0;
+
+   // 1. Trigger bar volume expansion check
+   if((double)rates[triggerShift].tick_volume < (avgBaseVol * InpScalpMinRelativeVolume))
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[Scalp Vol Filter] Trigger bar volume (%I64d) < Min required (%.0f)",
+                     rates[triggerShift].tick_volume, avgBaseVol * InpScalpMinRelativeVolume);
+      return false;
+   }
+
+   // 2. Pullback volume contraction check
+   int fromShift = MathMin(MathMax(pullbackStartShift, pullbackEndShift), arrayCount - 1);
+   int toShift   = MathMax(MathMin(pullbackStartShift, pullbackEndShift), 1);
+   long pbVolSum = 0;
+   int pbBars = 0;
+
+   for(int s = fromShift; s >= toShift; s--)
+   {
+      pbVolSum += rates[s].tick_volume;
+      pbBars++;
+   }
+   double avgPbVol = (pbBars > 0) ? (double)pbVolSum / pbBars : 0.0;
+
+   if(avgPbVol > (avgBaseVol * InpScalpPullbackVolRatio))
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[Scalp Vol Filter] Pullback volume too heavy (%.0f > %.0f allowed)",
+                     avgPbVol, avgBaseVol * InpScalpPullbackVolRatio);
+      return false;
+   }
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: POSITION EXECUTION                              |
+//+------------------------------------------------------------------+
+bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag)
+{
+   double entryPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   long currentSpread = 0;
+   SymbolInfoInteger(_Symbol, SYMBOL_SPREAD, currentSpread);
+   if(currentSpread > InpMaxSpreadPoints)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP REJECT] Spread (%d pts) > Max allowed (%d pts)", currentSpread, InpMaxSpreadPoints);
+      return false;
+   }
+
+   double lot = 0.0;
+   if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
+
+   double tpPrice = 0.0;
+   if(InpScalpFixedRRFallback > 0.0)
+   {
+      double rDist = MathAbs(entryPrice - slPrice);
+      tpPrice = isBuy ? (entryPrice + rDist * InpScalpFixedRRFallback) : (entryPrice - rDist * InpScalpFixedRRFallback);
+   }
+
+   if(!ValidateBrokerDistance(entryPrice, slPrice, tpPrice)) return false;
+
+   string comment = StringFormat("SCALP_%s %s %s", (isBuy ? "H2" : "L2"), (InpScalpExecutionTF == PERIOD_M5 ? "M5" : "M1"), (isBuy ? "Buy" : "Sell"));
+
+   bool success = false;
+   if(isBuy)
+      success = m_trade.Buy(lot, _Symbol, entryPrice, slPrice, tpPrice, comment);
+   else
+      success = m_trade.Sell(lot, _Symbol, entryPrice, slPrice, tpPrice, comment);
+
+   if(!success)
+   {
+      PrintFormat("[SCALP EXEC FAILED] %s retcode=%u desc=%s", comment, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+      return false;
+   }
+
+   uint retcode = m_trade.ResultRetcode();
+   if(retcode != TRADE_RETCODE_DONE && retcode != TRADE_RETCODE_PLACED)
+   {
+      PrintFormat("[SCALP EXEC FAILED] %s retcode=%u desc=%s", comment, retcode, m_trade.ResultRetcodeDescription());
+      return false;
+   }
+
+   ulong dealTicket = m_trade.ResultDeal();
+   ulong posTicket  = 0;
+   if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+      posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+   if(posTicket == 0) posTicket = m_trade.ResultOrder();
+   if(posTicket == 0)
+   {
+      PrintFormat("[SCALP EXEC WARN] No position ticket obtained for %s", comment);
+      return false;
+   }
+
+   PrintFormat("[SCALP EXEC OK] %s pos=#%I64u deal=#%I64u lot=%.2f sl=%.5f tp=%.5f retcode=%u",
+               comment, posTicket, dealTicket, lot, slPrice, tpPrice, retcode);
+
+   RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, (isBuy ? POSITION_TYPE_BUY : POSITION_TYPE_SELL), setupTag);
+   m_scalpTradesToday++;
+   m_scalpBarsInTrade = 0;
+
+   if(InpDrawChartObjects)
+      DrawSignalMarker(TimeCurrent(), entryPrice, setupTag, (isBuy ? clrLimeGreen : clrCrimson), isBuy);
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: POSITION CLOSE HELPER                           |
+//+------------------------------------------------------------------+
+void Scalp_ClosePosition(ulong ticket, ENUM_SCALP_EXIT_REASON reason, string detail)
+{
+   if(m_trade.PositionClose(ticket))
+   {
+      uint retcode = m_trade.ResultRetcode();
+      if(retcode == TRADE_RETCODE_DONE)
+      {
+         PrintFormat("[SCALP EXIT OK] Position #%I64u closed. Reason: %s (%s) retcode=%u",
+                     ticket, EnumToString(reason), detail, retcode);
+         m_scalpLastExitTime = TimeCurrent();
+         m_scalpBarsInTrade  = 0;
+         m_scalpState.state  = SCALP_STATE_IDLE;
+      }
+      else
+      {
+         PrintFormat("[SCALP EXIT WARN] PositionClose #%I64u retcode=%u desc=%s",
+                     ticket, retcode, m_trade.ResultRetcodeDescription());
+      }
+   }
+   else
+   {
+      PrintFormat("[SCALP EXIT FAILED] PositionClose #%I64u returned false. retcode=%u desc=%s",
+                  ticket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: DYNAMIC EXITS & TICK MANAGEMENT                 |
+//+------------------------------------------------------------------+
+void Scalp_ManageActivePositions()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      if(!m_position.SelectByIndex(i)) continue;
+      if(m_position.Symbol() != _Symbol || m_position.Magic() != InpMagicNumber) continue;
+
+      ulong ticket         = m_position.Ticket();
+      ENUM_POSITION_TYPE type = m_position.PositionType();
+      double openPrice     = m_position.PriceOpen();
+      double currentSL     = m_position.StopLoss();
+      double currentTP     = m_position.TakeProfit();
+      double currentPrice  = (type == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+      int trackIdx = FindTrackedPositionIndex(ticket);
+      double initialSL      = (trackIdx >= 0) ? m_trackedPositions[trackIdx].initialSL : currentSL;
+      double initialRiskPts = (trackIdx >= 0) ? m_trackedPositions[trackIdx].initialRiskPoints : MathAbs(openPrice - currentSL) / m_point;
+
+      if(initialRiskPts <= 0.0) continue;
+
+      double profitPts = (type == POSITION_TYPE_BUY) ? (currentPrice - openPrice) / m_point : (openPrice - currentPrice) / m_point;
+      double currentR  = profitPts / initialRiskPts;
+
+      // 1. Session Filter Cutoff Exit
+      if(InpScalpUseSessionFilter && !Scalp_IsSessionAllowed())
+      {
+         Scalp_ClosePosition(ticket, SCALP_EXIT_SESSION_END, "Session Filter Hours Cutoff");
+         continue;
+      }
+
+      // 2. Break-Even Protection (+1.0R)
+      if(InpUseBreakEven && trackIdx >= 0 && !m_trackedPositions[trackIdx].breakEvenApplied)
+      {
+         if(currentR >= InpBreakEvenTriggerRR)
+         {
+            double lockDist = InpBreakEvenLockPips * m_pipSize;
+            double beSL     = (type == POSITION_TYPE_BUY) ? (openPrice + lockDist) : (openPrice - lockDist);
+
+            bool needsModify = (type == POSITION_TYPE_BUY) ? (beSL > currentSL) : (currentSL == 0.0 || beSL < currentSL);
+            if(needsModify)
+            {
+               if(m_trade.PositionModify(ticket, beSL, currentTP))
+               {
+                  uint retcode = m_trade.ResultRetcode();
+                  if(retcode == TRADE_RETCODE_DONE)
+                  {
+                     m_trackedPositions[trackIdx].breakEvenApplied = true;
+                     PrintFormat("[SCALP BE OK] Position #%I64u moved to BE at %.5f retcode=%u", ticket, beSL, retcode);
+                  }
+               }
+            }
+         }
+      }
+
+      // 3. Dynamic Bar-by-Bar Trailing Stop (Behind prior closed bar low/high)
+      if(InpScalpUseTrailing && currentR >= InpScalpTrailingStartR)
+      {
+         MqlRates rates[];
+         ArraySetAsSeries(rates, true);
+         if(CopyRates(_Symbol, InpScalpExecutionTF, 1, 2, rates) >= 2)
+         {
+            if(type == POSITION_TYPE_BUY)
+            {
+               double newSL = rates[0].low - (InpStopLossBufferPips * m_pipSize);
+               if(newSL > currentSL && (newSL - currentSL) >= (m_pipSize * 1.0))
+               {
+                  if(m_trade.PositionModify(ticket, newSL, currentTP))
+                  {
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                        PrintFormat("[SCALP TRAIL OK] BUY #%I64u trailed to %.5f retcode=%u", ticket, newSL, retcode);
+                  }
+               }
+            }
+            else
+            {
+               double newSL = rates[0].high + (InpStopLossBufferPips * m_pipSize);
+               if((currentSL == 0.0 || newSL < currentSL) && (currentSL == 0.0 || (currentSL - newSL) >= (m_pipSize * 1.0)))
+               {
+                  if(m_trade.PositionModify(ticket, newSL, currentTP))
+                  {
+                     uint retcode = m_trade.ResultRetcode();
+                     if(retcode == TRADE_RETCODE_DONE)
+                        PrintFormat("[SCALP TRAIL OK] SELL #%I64u trailed to %.5f retcode=%u", ticket, newSL, retcode);
+                  }
+               }
+            }
+         }
+      }
+
+      // 4. Opposing Major S/R Wall Reached
+      if(InpScalpDynamicExits && currentR >= 0.5)
+      {
+         int srCount = ArraySize(m_srZones);
+         for(int z = 0; z < srCount; z++)
+         {
+            if(type == POSITION_TYPE_BUY)
+            {
+               if(m_srZones[z].priceBottom > openPrice && currentPrice >= (m_srZones[z].priceBottom - (3.0 * m_pipSize)))
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_SR_WALL_REACHED,
+                                      StringFormat("Reached Resistance Wall at %.5f (Profit R=%.2f)", m_srZones[z].priceBottom, currentR));
+                  break;
+               }
+            }
+            else
+            {
+               if(m_srZones[z].priceTop < openPrice && currentPrice <= (m_srZones[z].priceTop + (3.0 * m_pipSize)))
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_SR_WALL_REACHED,
+                                      StringFormat("Reached Support Wall at %.5f (Profit R=%.2f)", m_srZones[z].priceTop, currentR));
+                  break;
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: FINITE STATE MACHINE UPDATE                     |
+//+------------------------------------------------------------------+
+void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_TREND m5Trend, double m5Invalidation, double m5ImpulseExtreme, ENUM_MARKET_TREND m15Trend)
+{
+   if(copied < 10) return;
+
+   // STATE 1: IDLE -> TREND DETECTED
+   if(m_scalpState.state == SCALP_STATE_IDLE)
+   {
+      if(m5Trend == TREND_BULLISH && m15Trend != TREND_BEARISH)
+      {
+         m_scalpState.state             = SCALP_STATE_TREND_DETECTED;
+         m_scalpState.trendDirection    = +1;
+         m_scalpState.invalidationLevel = m5Invalidation;
+         m_scalpState.impulseExtreme    = m5ImpulseExtreme;
+         m_scalpState.impulseTime       = rates[1].time;
+         m_scalpState.pullbackBarCount  = 0;
+         if(InpEnableDebugLog)
+            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BULL) ImpulseExtreme=%.5f Invalidation=%.5f", m5ImpulseExtreme, m5Invalidation);
+      }
+      else if(m5Trend == TREND_BEARISH && m15Trend != TREND_BULLISH)
+      {
+         m_scalpState.state             = SCALP_STATE_TREND_DETECTED;
+         m_scalpState.trendDirection    = -1;
+         m_scalpState.invalidationLevel = m5Invalidation;
+         m_scalpState.impulseExtreme    = m5ImpulseExtreme;
+         m_scalpState.impulseTime       = rates[1].time;
+         m_scalpState.pullbackBarCount  = 0;
+         if(InpEnableDebugLog)
+            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BEAR) ImpulseExtreme=%.5f Invalidation=%.5f", m5ImpulseExtreme, m5Invalidation);
+      }
+      return;
+   }
+
+   // STATE 2: TREND DETECTED -> PULLBACK
+   if(m_scalpState.state == SCALP_STATE_TREND_DETECTED)
+   {
+      if(m_scalpState.trendDirection == +1)
+      {
+         if(rates[1].high > m_scalpState.impulseExtreme)
+         {
+            m_scalpState.impulseExtreme = rates[1].high;
+            m_scalpState.impulseTime    = rates[1].time;
+         }
+         else if(rates[1].high < rates[2].high)
+         {
+            m_scalpState.state               = SCALP_STATE_PULLBACK;
+            m_scalpState.pullbackStartShift  = 1;
+            m_scalpState.pullbackExtreme      = rates[1].low;
+            m_scalpState.pullbackExtremeTime  = rates[1].time;
+            m_scalpState.pullbackBarCount     = 1;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] TREND_DETECTED -> PULLBACK (BULL) Extreme=%.5f", rates[1].low);
+         }
+      }
+      else if(m_scalpState.trendDirection == -1)
+      {
+         if(rates[1].low < m_scalpState.impulseExtreme)
+         {
+            m_scalpState.impulseExtreme = rates[1].low;
+            m_scalpState.impulseTime    = rates[1].time;
+         }
+         else if(rates[1].low > rates[2].low)
+         {
+            m_scalpState.state               = SCALP_STATE_PULLBACK;
+            m_scalpState.pullbackStartShift  = 1;
+            m_scalpState.pullbackExtreme      = rates[1].high;
+            m_scalpState.pullbackExtremeTime  = rates[1].time;
+            m_scalpState.pullbackBarCount     = 1;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] TREND_DETECTED -> PULLBACK (BEAR) Extreme=%.5f", rates[1].high);
+         }
+      }
+      return;
+   }
+
+   // STATE 3: PULLBACK -> FIRST ATTEMPT (H1 / L1)
+   if(m_scalpState.state == SCALP_STATE_PULLBACK)
+   {
+      m_scalpState.pullbackBarCount++;
+
+      // Invalidation & Max Bars Guard
+      if(m_scalpState.trendDirection == +1)
+      {
+         if(rates[1].low <= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].low < m_scalpState.pullbackExtreme)
+         {
+            m_scalpState.pullbackExtreme     = rates[1].low;
+            m_scalpState.pullbackExtremeTime = rates[1].time;
+         }
+
+         // Check H1 trigger: First bar taking out prior bar high
+         if(m_scalpState.pullbackBarCount >= InpScalpMinPullbackBars && rates[1].high > rates[2].high)
+         {
+            m_scalpState.state          = SCALP_STATE_FIRST_ATTEMPT;
+            m_scalpState.h1Shift        = 1;
+            m_scalpState.h1TriggerPrice = rates[2].high;
+            m_scalpState.h1Time         = rates[1].time;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] PULLBACK -> FIRST_ATTEMPT (H1) Trigger=%.5f", rates[2].high);
+         }
+      }
+      else if(m_scalpState.trendDirection == -1)
+      {
+         if(rates[1].high >= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].high > m_scalpState.pullbackExtreme)
+         {
+            m_scalpState.pullbackExtreme     = rates[1].high;
+            m_scalpState.pullbackExtremeTime = rates[1].time;
+         }
+
+         // Check L1 trigger: First bar taking out prior bar low
+         if(m_scalpState.pullbackBarCount >= InpScalpMinPullbackBars && rates[1].low < rates[2].low)
+         {
+            m_scalpState.state          = SCALP_STATE_FIRST_ATTEMPT;
+            m_scalpState.l1Shift        = 1;
+            m_scalpState.l1TriggerPrice = rates[2].low;
+            m_scalpState.l1Time         = rates[1].time;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] PULLBACK -> FIRST_ATTEMPT (L1) Trigger=%.5f", rates[2].low);
+         }
+      }
+      return;
+   }
+
+   // STATE 4: FIRST ATTEMPT -> FIRST ATTEMPT FAILED
+   if(m_scalpState.state == SCALP_STATE_FIRST_ATTEMPT)
+   {
+      m_scalpState.pullbackBarCount++;
+
+      if(m_scalpState.trendDirection == +1)
+      {
+         if(rates[1].low <= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].high > m_scalpState.impulseExtreme)
+         {
+            // Trend resumed without H2
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         // Failure: sellers push price down, making a new lower low
+         if(rates[1].low < rates[2].low)
+         {
+            m_scalpState.state = SCALP_STATE_FIRST_ATTEMPT_FAILED;
+            if(rates[1].low < m_scalpState.pullbackExtreme)
+            {
+               m_scalpState.pullbackExtreme     = rates[1].low;
+               m_scalpState.pullbackExtremeTime = rates[1].time;
+            }
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] FIRST_ATTEMPT -> FIRST_ATTEMPT_FAILED (H1 Failed at %.5f)", rates[1].low);
+         }
+      }
+      else if(m_scalpState.trendDirection == -1)
+      {
+         if(rates[1].high >= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].low < m_scalpState.impulseExtreme)
+         {
+            // Trend resumed without L2
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         // Failure: buyers push price up, making a new higher high
+         if(rates[1].high > rates[2].high)
+         {
+            m_scalpState.state = SCALP_STATE_FIRST_ATTEMPT_FAILED;
+            if(rates[1].high > m_scalpState.pullbackExtreme)
+            {
+               m_scalpState.pullbackExtreme     = rates[1].high;
+               m_scalpState.pullbackExtremeTime = rates[1].time;
+            }
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] FIRST_ATTEMPT -> FIRST_ATTEMPT_FAILED (L1 Failed at %.5f)", rates[1].high);
+         }
+      }
+      return;
+   }
+
+   // STATE 5: FIRST ATTEMPT FAILED -> SECOND ENTRY (H2 / L2) / SECOND BREAK
+   if(m_scalpState.state == SCALP_STATE_FIRST_ATTEMPT_FAILED)
+   {
+      m_scalpState.pullbackBarCount++;
+
+      if(m_scalpState.trendDirection == +1)
+      {
+         if(rates[1].low <= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].low < m_scalpState.pullbackExtreme)
+         {
+            m_scalpState.pullbackExtreme     = rates[1].low;
+            m_scalpState.pullbackExtremeTime = rates[1].time;
+         }
+
+         // Second attempt to resume trend (H2 bar)
+         if(rates[1].high > rates[2].high)
+         {
+            m_scalpState.h2Shift        = 1;
+            m_scalpState.h2TriggerPrice = rates[2].high;
+            m_scalpState.h2Time         = rates[1].time;
+
+            // Evaluate Second Break & Price Action confirmation immediately on Bar 1
+            double buffer = InpScalpBreakBufferPoints * m_point;
+            if(rates[1].high >= (m_scalpState.h2TriggerPrice + buffer))
+            {
+               if(Scalp_CheckSignalConfirmation(rates[1], true))
+               {
+                  double slPrice = m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize);
+                  double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+                  if(Scalp_CheckSRProximity(ask, slPrice, true))
+                  {
+                     if(Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
+                     {
+                        if(Scalp_ExecuteOrder(true, rates[1].high, slPrice, "SCALP_H2"))
+                        {
+                           m_scalpState.state = SCALP_STATE_IN_POSITION;
+                           return;
+                        }
+                     }
+                  }
+               }
+            }
+            m_scalpState.state = SCALP_STATE_SECOND_ENTRY_READY;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] FIRST_ATTEMPT_FAILED -> SECOND_ENTRY_READY (H2) Trigger=%.5f", m_scalpState.h2TriggerPrice);
+         }
+      }
+      else if(m_scalpState.trendDirection == -1)
+      {
+         if(rates[1].high >= m_scalpState.invalidationLevel || m_scalpState.pullbackBarCount > InpScalpMaxPullbackBars)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+         if(rates[1].high > m_scalpState.pullbackExtreme)
+         {
+            m_scalpState.pullbackExtreme     = rates[1].high;
+            m_scalpState.pullbackExtremeTime = rates[1].time;
+         }
+
+         // Second attempt to resume trend (L2 bar)
+         if(rates[1].low < rates[2].low)
+         {
+            m_scalpState.l2Shift        = 1;
+            m_scalpState.l2TriggerPrice = rates[2].low;
+            m_scalpState.l2Time         = rates[1].time;
+
+            double buffer = InpScalpBreakBufferPoints * m_point;
+            if(rates[1].low <= (m_scalpState.l2TriggerPrice - buffer))
+            {
+               if(Scalp_CheckSignalConfirmation(rates[1], false))
+               {
+                  double slPrice = m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize);
+                  double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+                  if(Scalp_CheckSRProximity(bid, slPrice, false))
+                  {
+                     if(Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
+                     {
+                        if(Scalp_ExecuteOrder(false, rates[1].low, slPrice, "SCALP_L2"))
+                        {
+                           m_scalpState.state = SCALP_STATE_IN_POSITION;
+                           return;
+                        }
+                     }
+                  }
+               }
+            }
+            m_scalpState.state = SCALP_STATE_SECOND_ENTRY_READY;
+            if(InpEnableDebugLog)
+               PrintFormat("[SCALP FSM] FIRST_ATTEMPT_FAILED -> SECOND_ENTRY_READY (L2) Trigger=%.5f", m_scalpState.l2TriggerPrice);
+         }
+      }
+      return;
+   }
+
+   // STATE 6: SECOND ENTRY READY -> TRIGGERED / EXPIRED
+   if(m_scalpState.state == SCALP_STATE_SECOND_ENTRY_READY)
+   {
+      if(m_scalpState.trendDirection == +1)
+      {
+         if(rates[1].low <= m_scalpState.invalidationLevel)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+
+         double buffer = InpScalpBreakBufferPoints * m_point;
+         if(rates[1].high >= (m_scalpState.h2TriggerPrice + buffer) && Scalp_CheckSignalConfirmation(rates[1], true))
+         {
+            double slPrice = m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize);
+            double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+            if(Scalp_CheckSRProximity(ask, slPrice, true) && Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
+            {
+               if(Scalp_ExecuteOrder(true, rates[1].high, slPrice, "SCALP_H2"))
+               {
+                  m_scalpState.state = SCALP_STATE_IN_POSITION;
+                  return;
+               }
+            }
+         }
+      }
+      else if(m_scalpState.trendDirection == -1)
+      {
+         if(rates[1].high >= m_scalpState.invalidationLevel)
+         {
+            m_scalpState.state = SCALP_STATE_IDLE;
+            return;
+         }
+
+         double buffer = InpScalpBreakBufferPoints * m_point;
+         if(rates[1].low <= (m_scalpState.l2TriggerPrice - buffer) && Scalp_CheckSignalConfirmation(rates[1], false))
+         {
+            double slPrice = m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize);
+            double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+            if(Scalp_CheckSRProximity(bid, slPrice, false) && Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
+            {
+               if(Scalp_ExecuteOrder(false, rates[1].low, slPrice, "SCALP_L2"))
+               {
+                  m_scalpState.state = SCALP_STATE_IN_POSITION;
+                  return;
+               }
+            }
+         }
+      }
+
+      // If not triggered, timeout setup back to IDLE
+      m_scalpState.state = SCALP_STATE_IDLE;
+      return;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SCALPING ENGINE: MAIN TICK HANDLER                               |
+//+------------------------------------------------------------------+
+void Scalp_OnTick()
+{
+   // 1. Manage Active Positions on every tick (BE, Trailing, S/R Wall)
+   Scalp_ManageActivePositions();
+
+   // 2. Bar-Gate: Run structure and setup evaluation strictly on closed bars
+   if(!IsNewScalpBar()) return;
+
+   // 3. Track Day Transition and Daily Risk Guards
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   datetime todayDate = dt.year * 10000 + dt.mon * 100 + dt.day;
+   if(m_scalpLastTradeDay != todayDate)
+   {
+      m_scalpLastTradeDay     = todayDate;
+      m_scalpTradesToday      = 0;
+      m_scalpDayStartBalance  = AccountInfoDouble(ACCOUNT_BALANCE);
+   }
+
+   // Daily Risk Cap & Profit Target Lock
+   if(m_scalpDayStartBalance > 0.0)
+   {
+      double curBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+      double dailyLossPct = (m_scalpDayStartBalance - curBalance) / m_scalpDayStartBalance * 100.0;
+      if(dailyLossPct >= InpScalpDailyLossLimitPct)
+      {
+         if(InpEnableDebugLog)
+            PrintFormat("[SCALP GUARD] Daily loss limit reached (%.2f%% >= %.2f%%). Halted today.",
+                        dailyLossPct, InpScalpDailyLossLimitPct);
+         return;
+      }
+      double dailyProfitPct = (curBalance - m_scalpDayStartBalance) / m_scalpDayStartBalance * 100.0;
+      if(dailyProfitPct >= InpScalpDailyProfitLockPct)
+      {
+         if(InpEnableDebugLog)
+            PrintFormat("[SCALP GUARD] Daily profit lock reached (%.2f%% >= %.2f%%). Gains locked today.",
+                        dailyProfitPct, InpScalpDailyProfitLockPct);
+         return;
+      }
+   }
+
+   // Daily Trade Count Limit
+   if(m_scalpTradesToday >= InpScalpMaxTradesPerDay)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP GUARD] Max daily trades reached (%d/%d).", m_scalpTradesToday, InpScalpMaxTradesPerDay);
+      return;
+   }
+
+   // 4. Session Time Check
+   if(!Scalp_IsSessionAllowed()) return;
+
+   // 5. Cooldown Bars After Prior Exit
+   if(m_scalpLastExitTime > 0)
+   {
+      int barsSinceExit = iBarShift(_Symbol, InpScalpExecutionTF, m_scalpLastExitTime);
+      if(barsSinceExit >= 0 && barsSinceExit < InpScalpCooldownBars) return;
+   }
+
+   // 6. Check Active Positions & Bar-Level Dynamic Exits
+   if(HasOpenPosition())
+   {
+      m_scalpBarsInTrade++;
+
+      MqlRates rates[];
+      ArraySetAsSeries(rates, true);
+      if(CopyRates(_Symbol, InpScalpExecutionTF, 0, 5, rates) >= 5)
+      {
+         for(int p = PositionsTotal() - 1; p >= 0; p--)
+         {
+            if(!m_position.SelectByIndex(p)) continue;
+            if(m_position.Symbol() != _Symbol || m_position.Magic() != InpMagicNumber) continue;
+
+            ulong ticket = m_position.Ticket();
+            ENUM_POSITION_TYPE type = m_position.PositionType();
+            double openPrice = m_position.PriceOpen();
+            int trackIdx = FindTrackedPositionIndex(ticket);
+            double initialRiskPts = (trackIdx >= 0) ? m_trackedPositions[trackIdx].initialRiskPoints : 100.0;
+            double profitPts = (type == POSITION_TYPE_BUY) ? (rates[1].close - openPrice) / m_point : (openPrice - rates[1].close) / m_point;
+            double currentR  = (initialRiskPts > 0.0) ? (profitPts / initialRiskPts) : 0.0;
+
+            // Dynamic Exit A: Momentum Stall (N bars in profit without progress)
+            if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= 0.5 && m_scalpBarsInTrade >= InpScalpStallBars)
+            {
+               Scalp_ClosePosition(ticket, SCALP_EXIT_MOMENTUM_STALL,
+                                   StringFormat("Stall for %d bars in profit (R=%.2f)", m_scalpBarsInTrade, currentR));
+               continue;
+            }
+
+            // Dynamic Exit B: Strong Opposite PA Candle
+            if(InpScalpDynamicExits && InpScalpExitOnOppositeBar)
+            {
+               if(type == POSITION_TYPE_BUY)
+               {
+                  bool oppEngulfing = (rates[1].close < rates[1].open && rates[1].close < rates[2].low);
+                  double upperWick = rates[1].high - MathMax(rates[1].open, rates[1].close);
+                  double rRange = rates[1].high - rates[1].low;
+                  bool oppPin = (rRange > 0.0 && (upperWick / rRange) >= 0.60 && rates[1].close < (rates[1].low + rRange * 0.40));
+                  if(oppEngulfing || oppPin)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bearish PA Candle");
+                     continue;
+                  }
+               }
+               else // Sell
+               {
+                  bool oppEngulfing = (rates[1].close > rates[1].open && rates[1].close > rates[2].high);
+                  double lowerWick = MathMin(rates[1].open, rates[1].close) - rates[1].low;
+                  double rRange = rates[1].high - rates[1].low;
+                  bool oppPin = (rRange > 0.0 && (lowerWick / rRange) >= 0.60 && rates[1].close > (rates[1].high - rRange * 0.40));
+                  if(oppEngulfing || oppPin)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bullish PA Candle");
+                     continue;
+                  }
+               }
+            }
+
+            // Dynamic Exit C: Micro-Structure Invalidation Break
+            if(InpScalpDynamicExits && InpScalpExitOnStructureBreak && m_scalpState.invalidationLevel > 0.0)
+            {
+               if(type == POSITION_TYPE_BUY && rates[1].close < m_scalpState.invalidationLevel)
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                      StringFormat("Close %.5f < Micro HL %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                  continue;
+               }
+               if(type == POSITION_TYPE_SELL && rates[1].close > m_scalpState.invalidationLevel)
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                      StringFormat("Close %.5f > Micro LH %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                  continue;
+               }
+            }
+         }
+      }
+      return;
+   }
+
+   // If position was closed, update state to IDLE
+   if(m_scalpState.state == SCALP_STATE_IN_POSITION)
+   {
+      m_scalpState.state = SCALP_STATE_IDLE;
+   }
+
+   // 7. Update S/R Zones for Proximity Filtering
+   UpdateSwingsAndStructure();
+   UpdateSRZones();
+
+   // 8. Detect Market Structure on Execution TF (M5) and Context TF (M15)
+   SSwingPivot m5Pivots[];
+   ENUM_MARKET_TREND m5Trend = TREND_RANGE;
+   double m5Invalidation = 0.0, m5ImpulseExtreme = 0.0;
+   Scalp_DetectMarketStructure(InpScalpExecutionTF, m5Pivots, m5Trend, m5Invalidation, m5ImpulseExtreme);
+
+   SSwingPivot m15Pivots[];
+   ENUM_MARKET_TREND m15Trend = TREND_RANGE;
+   double m15Invalidation = 0.0, m15ImpulseExtreme = 0.0;
+   Scalp_DetectMarketStructure(InpScalpContextTF, m15Pivots, m15Trend, m15Invalidation, m15ImpulseExtreme);
+
+   // 9. Fetch Closed Rates on Execution Timeframe
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   int copied = CopyRates(_Symbol, InpScalpExecutionTF, 0, MathMax(InpScalpStructureLookback + 20, 100), rates);
+   if(copied < 30) return;
+
+   // 10. Advance State Machine and Generate Scalping Trades
+   Scalp_UpdateStateMachine(rates, copied, m5Trend, m5Invalidation, m5ImpulseExtreme, m15Trend);
 }
 //+------------------------------------------------------------------+
