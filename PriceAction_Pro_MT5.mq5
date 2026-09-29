@@ -5,10 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "4.10"
+#property version   "6.00"
 #property description "Professional Price Action Trading System with Strict Mode Separation:"
 #property description "MODE A: BOOK_EXACT (Pure Price Action from 97-Page Course: Swings, S/R, Flips, 50% Confluence)"
 #property description "MODE B: ENHANCED (Optional Overlays: EMA, RSI, VSA, HTF Order Blocks/FVG)"
+#property description "MODE C: SCALPING_TREND_MOMENTUM v6.00 (Brooks/Volman/Mack 2nd Generation: Regimes, Compression, Scoring, Intelligent Exits)"
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -56,6 +57,49 @@ enum ENUM_SCALP_EXIT_REASON
    SCALP_EXIT_SR_WALL_REACHED       = 7,
    SCALP_EXIT_SESSION_END           = 8,
    SCALP_EXIT_TRAILING_STOP         = 9
+};
+
+enum ENUM_SCALP_TREND_REGIME
+{
+   REGIME_STRONG_BULL  = 3,  // Price > EMA20 > EMA50, slope up, consecutive closes above EMA
+   REGIME_BULL         = 2,  // Price > EMA20, slope up, bullish micro-swings
+   REGIME_WEAK_BULL    = 1,  // Bullish swings but flat EMA or frequent crosses
+   REGIME_RANGE        = 0,  // Intertwined EMAs, overlapping bars, no directional pivots
+   REGIME_WEAK_BEAR    = -1, // Bearish swings but flat EMA or frequent crosses
+   REGIME_BEAR         = -2, // Price < EMA20, slope down, bearish micro-swings
+   REGIME_STRONG_BEAR  = -3  // Price < EMA20 < EMA50, slope down, consecutive closes below EMA
+};
+
+enum ENUM_SCALP_PULLBACK_TYPE
+{
+   PULLBACK_SHALLOW    = 0,  // Fast/shallow (<38.2% retrace, 1-2 bars)
+   PULLBACK_NORMAL     = 1,  // High probability (38.2%-65%, 2-7 bars, touches/approaches EMA20)
+   PULLBACK_DEEP       = 2,  // Deep retracement (>65% but holds invalidation level)
+   PULLBACK_EXHAUSTED  = 3   // Excessive bars (>8 bars) or structural degradation
+};
+
+enum ENUM_SCALP_COUNTERTREND_SEVERITY
+{
+   COUNTER_NONE            = 0,
+   COUNTER_MINOR           = 1,  // Normal pause/retracement within noise (<0.6 ATR, above EMA) -> HOLD
+   COUNTER_MODERATE        = 2,  // Decent opposing push (0.6-1.0 ATR) -> TIGHTEN SL if in profit
+   COUNTER_STRONG          = 3,  // Powerful reversal/engulfing bar (>1.0 ATR) -> EXIT if past BE
+   COUNTER_STRUCTURE_BREAK = 4   // Breach of micro-pivot invalidation -> IMMEDIATE EXIT
+};
+
+enum ENUM_SCALP_SETUP_GRADE
+{
+   GRADE_REJECT = 0,
+   GRADE_C      = 1,  // Score 50-64
+   GRADE_B      = 2,  // Score 65-79 (Standard entry requirement)
+   GRADE_A      = 3,  // Score 80-89 (High quality)
+   GRADE_A_PLUS = 4   // Score 90-100 (Prime setup)
+};
+
+enum ENUM_SCALP_EXIT_INTELLIGENCE_MODE
+{
+   SCALP_EXIT_MODE_INTELLIGENT = 0, // Advanced multi-factor exit with hold buffer & counter-trend classification
+   SCALP_EXIT_MODE_CLASSIC_V5  = 1  // Original v5.00 exit behavior (for A/B testing)
 };
 
 enum ENUM_MARKET_TREND
@@ -188,6 +232,11 @@ struct SScalpStateMachine
    double            takeProfitPrice;
    string            setupDescription;
    datetime          setupTime;
+   ENUM_SCALP_TREND_REGIME trendRegime;
+   ENUM_SCALP_PULLBACK_TYPE pullbackType;
+   double            pressureScore;
+   double            setupScore;
+   ENUM_SCALP_SETUP_GRADE setupGrade;
 };
 
 //+------------------------------------------------------------------+
@@ -298,7 +347,9 @@ input int             InpScalpStructureLookback= 50;         // Lookback Bars fo
 input double          InpScalpMinImpulseAtr    = 1.0;        // Min Trend Impulse Size (Multiples of ATR)
 input int             InpScalpMinSeparationBars= 3;          // Min Separation Bars Between Swing Points
 input bool            InpScalpUseEmaContext    = true;       // Optional 20 EMA Trend Context (Slope & Price Side)
-input int             InpScalpEmaPeriod        = 20;         // EMA Context Period (M5)
+input int             InpScalpEmaPeriod        = 20;         // Fast EMA Context Period (M5)
+input int             InpScalpSlowEmaPeriod    = 50;         // Slow EMA Baseline Period (M5 Trend Baseline)
+input bool            InpScalpUseMacroH1       = false;      // Optional H1 Macro Trend Filter
 
 input group "=== 13. Scalping Pullback & H2/L2 / Second Break ==="
 input int             InpScalpMaxPullbackBars  = 8;          // Max Allowed Bars in Pullback Before Invalidation
@@ -307,6 +358,9 @@ input double          InpScalpBreakBufferPoints= 10.0;       // Second Break Tri
 input bool            InpScalpRequireSignalBar = true;       // Require Favorable Signal Bar Close (Top/Bottom 33%)
 input bool            InpScalpUseSRProximityFilter = true;   // Filter Entries Too Close to Opposing Major S/R
 input double          InpScalpMinRDistanceToSR = 1.0;        // Min Distance in R Multiples to Nearest Opposing S/R
+input bool            InpScalpUsePressureEngine= true;       // Enable Pressure & Volatility Compression Scoring
+input double          InpScalpMinPressureScore = 0.40;       // Minimum Pressure Score (0.0 - 1.0)
+input ENUM_SCALP_SETUP_GRADE InpScalpMinSetupGrade = GRADE_B;// Minimum Setup Quality Grade Required
 
 input group "=== 14. Scalping Volume Confirmation (Secondary Layer) ==="
 input bool            InpScalpUseVolumeConfirm = false;      // Enable Tick Volume Confirmation Layer
@@ -315,14 +369,19 @@ input double          InpScalpMinRelativeVolume= 1.0;        // Min Trigger Bar 
 input double          InpScalpPullbackVolRatio = 0.9;        // Max Pullback Avg Volume Relative to Impulse Avg Volume
 
 input group "=== 15. Scalping Dynamic Exits & Position Management ==="
+input ENUM_SCALP_EXIT_INTELLIGENCE_MODE InpScalpExitEngineMode = SCALP_EXIT_MODE_INTELLIGENT; // Exit Engine Mode (Intelligent vs Classic v5)
 input bool            InpScalpDynamicExits     = true;       // Enable Dynamic Price Action Exits
 input bool            InpScalpExitOnOppositeBar= true;       // Exit on Strong Opposite Reversal Candle
+input int             InpScalpMinHoldBars      = 2;          // Min Hold Bars Before Dynamic PA Reversal Exit
 input bool            InpScalpExitOnStructureBreak = true;   // Exit on Micro-Structure Invalidation
 input bool            InpScalpExitOnMomentumStall = true;    // Exit on Momentum Stall (N bars no progress)
 input int             InpScalpStallBars        = 4;          // Consecutive Bars Without New Extreme in Profit
+input double          InpScalpStallMinR        = 0.8;        // Min Accrued Profit R Before Momentum Stall Evaluates
 input double          InpScalpFixedRRFallback  = 2.0;        // Fallback Take Profit Target (R Multiples, 0=None)
+input double          InpScalpRunnerTargetR    = 3.0;        // Multi-R Runner Target (0 = None / Trailing Only)
 input bool            InpScalpUseTrailing      = true;       // Trailing Stop Behind Prior Bar Extremes
 input double          InpScalpTrailingStartR   = 1.0;        // Start Trailing Stop after Gaining +R
+input bool            InpScalpTrailBehindTwoBars= true;      // Trail Behind Lowest Low of 2 Bars (Avoid Whipsaw)
 
 input group "=== 16. Scalping Session & Risk Protections ==="
 input bool            InpScalpUseSessionFilter = true;       // Enable Trading Session Filter
@@ -361,6 +420,8 @@ SPointOfInterest  m_htfPois[];
 // Scalping Engine Variables (Mode C)
 SScalpStateMachine   m_scalpState;
 int                  m_hScalpEma         = INVALID_HANDLE;
+int                  m_hScalpEmaSlow     = INVALID_HANDLE;
+int                  m_hScalpEmaH1       = INVALID_HANDLE;
 int                  m_hScalpAtr         = INVALID_HANDLE;
 int                  m_hScalpVolMa       = INVALID_HANDLE;
 datetime             m_scalpLastBarTime  = 0;
@@ -2279,8 +2340,20 @@ int Scalp_OnInit()
       m_hScalpEma = iMA(_Symbol, InpScalpExecutionTF, InpScalpEmaPeriod, 0, MODE_EMA, PRICE_CLOSE);
       if(m_hScalpEma == INVALID_HANDLE)
       {
-         Print("[Scalp Init Error] Failed to create M5 EMA handle.");
+         Print("[Scalp Init Error] Failed to create M5 Fast EMA handle.");
          return INIT_FAILED;
+      }
+
+      m_hScalpEmaSlow = iMA(_Symbol, InpScalpExecutionTF, InpScalpSlowEmaPeriod, 0, MODE_EMA, PRICE_CLOSE);
+      if(m_hScalpEmaSlow == INVALID_HANDLE)
+      {
+         Print("[Scalp Init Error] Failed to create M5 Slow EMA handle.");
+         return INIT_FAILED;
+      }
+
+      if(InpScalpUseMacroH1)
+      {
+         m_hScalpEmaH1 = iMA(_Symbol, PERIOD_H1, InpScalpEmaPeriod, 0, MODE_EMA, PRICE_CLOSE);
       }
    }
 
@@ -2313,6 +2386,8 @@ int Scalp_OnInit()
 void Scalp_OnDeinit()
 {
    if(m_hScalpEma != INVALID_HANDLE) IndicatorRelease(m_hScalpEma);
+   if(m_hScalpEmaSlow != INVALID_HANDLE) IndicatorRelease(m_hScalpEmaSlow);
+   if(m_hScalpEmaH1 != INVALID_HANDLE) IndicatorRelease(m_hScalpEmaH1);
    if(m_hScalpAtr != INVALID_HANDLE) IndicatorRelease(m_hScalpAtr);
    if(m_hScalpVolMa != INVALID_HANDLE) IndicatorRelease(m_hScalpVolMa);
 
@@ -2625,6 +2700,298 @@ bool Scalp_CheckVolumeConfirmation(const MqlRates &rates[], int triggerShift, in
 }
 
 //+------------------------------------------------------------------+
+//| SUB-ENGINE 1: TREND REGIME CLASSIFIER                            |
+//| Evaluates 20/50 EMA alignment, slope, price relation, consecutive|
+//| closes to classify market into 7 granular trend states.          |
+//+------------------------------------------------------------------+
+ENUM_SCALP_TREND_REGIME Scalp_ClassifyTrendRegime(ENUM_TIMEFRAMES tf, double &fastEmaOut, double &slowEmaOut)
+{
+   fastEmaOut = 0.0;
+   slowEmaOut = 0.0;
+
+   double emaFast[], emaSlow[];
+   ArraySetAsSeries(emaFast, true);
+   ArraySetAsSeries(emaSlow, true);
+
+   if(CopyBuffer(m_hScalpEma, 0, 1, 3, emaFast) < 3) return REGIME_RANGE;
+   if(CopyBuffer(m_hScalpEmaSlow, 0, 1, 3, emaSlow) < 3) return REGIME_RANGE;
+
+   fastEmaOut = emaFast[0];
+   slowEmaOut = emaSlow[0];
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(_Symbol, tf, 0, 5, rates) < 5) return REGIME_RANGE;
+
+   double fastSlope = (emaFast[0] - emaFast[2]) / m_point;
+   double slowSlope = (emaSlow[0] - emaSlow[2]) / m_point;
+
+   bool priceAboveFast = (rates[1].close > emaFast[0]);
+   bool priceBelowFast = (rates[1].close < emaFast[0]);
+   bool fastAboveSlow  = (emaFast[0] > emaSlow[0]);
+   bool fastBelowSlow  = (emaFast[0] < emaSlow[0]);
+
+   bool consecAbove = (rates[1].close > emaFast[0] && rates[2].close > emaFast[1] && rates[3].close > emaFast[2]);
+   bool consecBelow = (rates[1].close < emaFast[0] && rates[2].close < emaFast[1] && rates[3].close < emaFast[2]);
+
+   // Strong Bull: Price > EMA20 > EMA50, positive slope, consecutive closes
+   if(priceAboveFast && fastAboveSlow && fastSlope >= 0.5 && slowSlope >= 0.0 && consecAbove)
+      return REGIME_STRONG_BULL;
+
+   // Bull: Price > EMA20, rising slope
+   if(priceAboveFast && fastSlope > 0.0)
+      return REGIME_BULL;
+
+   // Weak Bull: Above EMA20 OR rising slope above EMA50
+   if(priceAboveFast || (fastSlope > 0.5 && rates[1].close >= emaSlow[0]))
+      return REGIME_WEAK_BULL;
+
+   // Strong Bear: Price < EMA20 < EMA50, negative slope, consecutive closes
+   if(priceBelowFast && fastBelowSlow && fastSlope <= -0.5 && slowSlope <= 0.0 && consecBelow)
+      return REGIME_STRONG_BEAR;
+
+   // Bear: Price < EMA20, falling slope
+   if(priceBelowFast && fastSlope < 0.0)
+      return REGIME_BEAR;
+
+   // Weak Bear: Below EMA20 OR falling slope below EMA50
+   if(priceBelowFast || (fastSlope < -0.5 && rates[1].close <= emaSlow[0]))
+      return REGIME_WEAK_BEAR;
+
+   return REGIME_RANGE;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 2: SMART PULLBACK CLASSIFIER                          |
+//| Classifies counter-trend correction: SHALLOW, NORMAL, DEEP, etc. |
+//+------------------------------------------------------------------+
+ENUM_SCALP_PULLBACK_TYPE Scalp_AnalyzePullback(int barCount, double impulseSize, double pullbackDist, double atr)
+{
+   if(barCount > InpScalpMaxPullbackBars)
+      return PULLBACK_EXHAUSTED;
+
+   double retraceRatio = (impulseSize > 0.0) ? (pullbackDist / impulseSize) : 0.0;
+
+   if(retraceRatio < 0.35 && barCount <= 2)
+      return PULLBACK_SHALLOW;
+
+   if(retraceRatio >= 0.35 && retraceRatio <= 0.68 && barCount >= 2 && barCount <= 7)
+      return PULLBACK_NORMAL;
+
+   if(retraceRatio > 0.68)
+      return PULLBACK_DEEP;
+
+   return PULLBACK_NORMAL;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 3: PRESSURE & COMPRESSION ENGINE                      |
+//| Quantifies range compression, proximity cling, and wick test     |
+//| Returns composite PressureScore in range [0.0, 1.0]              |
+//+------------------------------------------------------------------+
+double Scalp_CalculatePressureScore(const MqlRates &rates[], int copied, double atr, double emaVal, bool isBull)
+{
+   if(copied < 5 || atr <= 0.0) return 0.50;
+
+   double score = 0.0;
+
+   // 1. Range Compression (3-bar average range relative to ATR)
+   double r1 = rates[1].high - rates[1].low;
+   double r2 = rates[2].high - rates[2].low;
+   double r3 = rates[3].high - rates[3].low;
+   double avgRange3 = (r1 + r2 + r3) / 3.0;
+   double rangeRatio = avgRange3 / atr;
+
+   if(rangeRatio < 0.60)       score += 0.35; // Severe compression (Bob Volman build-up)
+   else if(rangeRatio < 0.85)  score += 0.25; // Good compression
+   else if(rangeRatio < 1.05)  score += 0.15; // Moderate
+   else                        score += 0.05;
+
+   // 2. Proximity Cling to EMA20
+   double distEma = MathAbs(rates[1].close - emaVal) / atr;
+   if(distEma < 0.30)       score += 0.25; // Clinging right at EMA20
+   else if(distEma < 0.60)  score += 0.15;
+   else if(distEma < 1.00)  score += 0.05;
+
+   // 3. Body Overlap / Congestion
+   double overlap = MathMin(rates[1].high, rates[2].high) - MathMax(rates[1].low, rates[2].low);
+   if(overlap > 0.0)
+   {
+      double overlapRatio = overlap / MathMax(MathMax(r1, r2), m_point);
+      if(overlapRatio >= 0.40) score += 0.20;
+      else                     score += 0.10;
+   }
+
+   // 4. Directional Wick Rejection
+   if(isBull)
+   {
+      double lowerWick1 = (MathMin(rates[1].open, rates[1].close) - rates[1].low) / MathMax(r1, m_point);
+      double lowerWick2 = (MathMin(rates[2].open, rates[2].close) - rates[2].low) / MathMax(r2, m_point);
+      if(lowerWick1 >= 0.35 || lowerWick2 >= 0.35) score += 0.20;
+   }
+   else
+   {
+      double upperWick1 = (rates[1].high - MathMax(rates[1].open, rates[1].close)) / MathMax(r1, m_point);
+      double upperWick2 = (rates[2].high - MathMax(rates[2].open, rates[2].close)) / MathMax(r2, m_point);
+      if(upperWick1 >= 0.35 || upperWick2 >= 0.35) score += 0.20;
+   }
+
+   return MathMin(MathMax(score, 0.0), 1.0);
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 4: S/R ROOM CALCULATOR                                |
+//+------------------------------------------------------------------+
+double Scalp_GetSRRoomR(double entryPrice, double slPrice, bool isBuy)
+{
+   double rDist = MathAbs(entryPrice - slPrice);
+   if(rDist <= 0.0) return 5.0;
+
+   int totalZones = ArraySize(m_srZones);
+   double nearestOpposingDist = 999999.0;
+
+   for(int i = 0; i < totalZones; i++)
+   {
+      if(isBuy)
+      {
+         if(m_srZones[i].priceBottom > entryPrice)
+         {
+            double d = m_srZones[i].priceBottom - entryPrice;
+            if(d < nearestOpposingDist) nearestOpposingDist = d;
+         }
+      }
+      else
+      {
+         if(m_srZones[i].priceTop < entryPrice)
+         {
+            double d = entryPrice - m_srZones[i].priceTop;
+            if(d < nearestOpposingDist) nearestOpposingDist = d;
+         }
+      }
+   }
+
+   return (nearestOpposingDist < 999900.0) ? (nearestOpposingDist / rDist) : 5.0;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 5: SETUP QUALITY SCORING (A+ / A / B / C / REJECT)    |
+//+------------------------------------------------------------------+
+double Scalp_CalculateSetupScore(ENUM_SCALP_TREND_REGIME m5Regime, ENUM_SCALP_TREND_REGIME m15Regime,
+                                ENUM_SCALP_PULLBACK_TYPE pbType, double pressureScore,
+                                const MqlRates &signalBar, bool isBuy, double atr,
+                                double srRoomR, ENUM_SCALP_SETUP_GRADE &outGrade)
+{
+   double score = 0.0;
+
+   // Component A: Trend Regime Quality (30 pts max)
+   int dirSign = isBuy ? 1 : -1;
+   int m5ScoreVal = (int)m5Regime * dirSign;
+   if(m5ScoreVal >= 3)       score += 30.0; // Strong Bull/Bear
+   else if(m5ScoreVal >= 2)  score += 24.0; // Bull/Bear
+   else if(m5ScoreVal >= 1)  score += 15.0; // Weak
+   else                      score += 0.0;  // Range or Counter
+
+   // M15 Alignment Bonus (5 pts)
+   int m15ScoreVal = (int)m15Regime * dirSign;
+   if(m15ScoreVal > 0)       score += 5.0;
+
+   // Component B: Pullback Quality (25 pts max)
+   if(pbType == PULLBACK_NORMAL)       score += 25.0;
+   else if(pbType == PULLBACK_SHALLOW) score += 18.0;
+   else if(pbType == PULLBACK_DEEP)    score += 10.0;
+   else                                score += 0.0;
+
+   // Component C: Pressure Score (20 pts max)
+   score += (pressureScore * 20.0);
+
+   // Component D: Signal Bar Conviction (10 pts max)
+   double sRng = signalBar.high - signalBar.low;
+   if(sRng > 0.0)
+   {
+      double closeRatio = isBuy ? (signalBar.close - signalBar.low) / sRng : (signalBar.high - signalBar.close) / sRng;
+      if(closeRatio >= 0.70) score += 7.0;
+      else if(closeRatio >= 0.55) score += 4.0;
+
+      if(atr > 0.0 && (sRng / atr) >= 0.75) score += 3.0;
+   }
+
+   // Component E: S/R Room (10 pts max)
+   if(srRoomR >= 2.0)      score += 10.0;
+   else if(srRoomR >= 1.5) score += 7.0;
+   else if(srRoomR >= 1.0) score += 4.0;
+
+   score = MathMin(MathMax(score, 0.0), 100.0);
+
+   // Assign Grade
+   if(score >= 85.0)      outGrade = GRADE_A_PLUS;
+   else if(score >= 75.0) outGrade = GRADE_A;
+   else if(score >= 65.0) outGrade = GRADE_B;
+   else if(score >= 50.0) outGrade = GRADE_C;
+   else                   outGrade = GRADE_REJECT;
+
+   return score;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 6: COUNTER-TREND SEVERITY CLASSIFIER                  |
+//| Evaluates opposing bar context: Minor, Moderate, Strong, Break   |
+//+------------------------------------------------------------------+
+ENUM_SCALP_COUNTERTREND_SEVERITY Scalp_ClassifyCounterTrendMove(const MqlRates &bar1, const MqlRates &bar2,
+                                                               bool isBuyPos, double atr, double emaVal,
+                                                               double invalidationLevel)
+{
+   // 1. Structure Break Check
+   if(invalidationLevel > 0.0)
+   {
+      if(isBuyPos && bar1.close < invalidationLevel)  return COUNTER_STRUCTURE_BREAK;
+      if(!isBuyPos && bar1.close > invalidationLevel) return COUNTER_STRUCTURE_BREAK;
+   }
+
+   double bodySize = MathAbs(bar1.close - bar1.open);
+   double barRange = bar1.high - bar1.low;
+   double bodyAtrRatio  = (atr > 0.0) ? (bodySize / atr) : 0.0;
+   double rangeAtrRatio = (atr > 0.0) ? (barRange / atr) : 0.0;
+
+   if(isBuyPos)
+   {
+      if(bar1.close >= bar1.open) return COUNTER_NONE;
+
+      bool brokePriorLow = (bar1.close < bar2.low);
+      bool belowEma      = (bar1.close < emaVal);
+      double upperWick   = bar1.high - bar1.open;
+      bool isBearPin     = (barRange > 0.0 && (upperWick / barRange) >= 0.55 && bar1.close < (bar1.low + barRange * 0.35));
+
+      // STRONG: Large body (>1.0 ATR) engulfing prior bar OR massive bear pin with close below EMA
+      if((bodyAtrRatio >= 1.0 && brokePriorLow && belowEma) || (isBearPin && rangeAtrRatio >= 1.0 && belowEma))
+         return COUNTER_STRONG;
+
+      // MODERATE: Decent bearish push (0.6-1.0 ATR) breaking prior low OR clean close below EMA
+      if((bodyAtrRatio >= 0.60 && brokePriorLow) || (belowEma && bodyAtrRatio >= 0.50))
+         return COUNTER_MODERATE;
+
+      // MINOR: Small body (<0.6 ATR), close above EMA20 (normal trend pullback/noise)
+      return COUNTER_MINOR;
+   }
+   else // Sell Position
+   {
+      if(bar1.close <= bar1.open) return COUNTER_NONE;
+
+      bool brokePriorHigh = (bar1.close > bar2.high);
+      bool aboveEma       = (bar1.close > emaVal);
+      double lowerWick    = bar1.open - bar1.low;
+      bool isBullPin      = (barRange > 0.0 && (lowerWick / barRange) >= 0.55 && bar1.close > (bar1.high - barRange * 0.35));
+
+      if((bodyAtrRatio >= 1.0 && brokePriorHigh && aboveEma) || (isBullPin && rangeAtrRatio >= 1.0 && aboveEma))
+         return COUNTER_STRONG;
+
+      if((bodyAtrRatio >= 0.60 && brokePriorHigh) || (aboveEma && bodyAtrRatio >= 0.50))
+         return COUNTER_MODERATE;
+
+      return COUNTER_MINOR;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| SCALPING ENGINE: POSITION EXECUTION                              |
 //+------------------------------------------------------------------+
 bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag)
@@ -2783,36 +3150,44 @@ void Scalp_ManageActivePositions()
          }
       }
 
-      // 3. Dynamic Bar-by-Bar Trailing Stop (Behind prior closed bar low/high)
+      // 3. Dynamic Bar-by-Bar Trailing Stop (2-Bar cushion or 1-Bar runner lock)
       if(InpScalpUseTrailing && currentR >= InpScalpTrailingStartR)
       {
          MqlRates rates[];
          ArraySetAsSeries(rates, true);
-         if(CopyRates(_Symbol, InpScalpExecutionTF, 1, 2, rates) >= 2)
+         if(CopyRates(_Symbol, InpScalpExecutionTF, 1, 3, rates) >= 3)
          {
             if(type == POSITION_TYPE_BUY)
             {
-               double newSL = rates[0].low - (InpStopLossBufferPips * m_pipSize);
+               double refLow = rates[0].low;
+               if(InpScalpTrailBehindTwoBars && (InpScalpRunnerTargetR <= 0.0 || currentR < InpScalpRunnerTargetR))
+                  refLow = MathMin(rates[0].low, rates[1].low);
+
+               double newSL = refLow - (InpStopLossBufferPips * m_pipSize);
                if(newSL > currentSL && (newSL - currentSL) >= (m_pipSize * 1.0))
                {
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
                      uint retcode = m_trade.ResultRetcode();
                      if(retcode == TRADE_RETCODE_DONE)
-                        PrintFormat("[SCALP TRAIL OK] BUY #%I64u trailed to %.5f retcode=%u", ticket, newSL, retcode);
+                        PrintFormat("[SCALP TRAIL OK] BUY #%I64u trailed to %.5f (R=%.2f) retcode=%u", ticket, newSL, currentR, retcode);
                   }
                }
             }
-            else
+            else // SELL
             {
-               double newSL = rates[0].high + (InpStopLossBufferPips * m_pipSize);
+               double refHigh = rates[0].high;
+               if(InpScalpTrailBehindTwoBars && (InpScalpRunnerTargetR <= 0.0 || currentR < InpScalpRunnerTargetR))
+                  refHigh = MathMax(rates[0].high, rates[1].high);
+
+               double newSL = refHigh + (InpStopLossBufferPips * m_pipSize);
                if((currentSL == 0.0 || newSL < currentSL) && (currentSL == 0.0 || (currentSL - newSL) >= (m_pipSize * 1.0)))
                {
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
                      uint retcode = m_trade.ResultRetcode();
                      if(retcode == TRADE_RETCODE_DONE)
-                        PrintFormat("[SCALP TRAIL OK] SELL #%I64u trailed to %.5f retcode=%u", ticket, newSL, retcode);
+                        PrintFormat("[SCALP TRAIL OK] SELL #%I64u trailed to %.5f (R=%.2f) retcode=%u", ticket, newSL, currentR, retcode);
                   }
                }
             }
@@ -2849,36 +3224,111 @@ void Scalp_ManageActivePositions()
 }
 
 //+------------------------------------------------------------------+
+//| SCALPING ENGINE: EVALUATE & EXECUTE SECOND ENTRY                 |
+//| Runs quality scoring, pressure scoring, SR room, and executes    |
+//+------------------------------------------------------------------+
+bool Scalp_EvaluateAndExecuteEntry(bool isBuy, const MqlRates &rates[], int copied, ENUM_SCALP_TREND_REGIME m15Regime, string baseTag)
+{
+   if(!Scalp_CheckSignalConfirmation(rates[1], isBuy)) return false;
+
+   double atrVal[1];
+   double atr = (CopyBuffer(m_hScalpAtr, 0, 1, 1, atrVal) > 0 && atrVal[0] > 0.0) ? atrVal[0] : (10.0 * m_point);
+
+   double fastEma[1];
+   double emaVal = (CopyBuffer(m_hScalpEma, 0, 1, 1, fastEma) > 0) ? fastEma[0] : rates[1].close;
+
+   // 1. Calculate Pullback Quality
+   double pbDist = MathAbs(m_scalpState.impulseExtreme - m_scalpState.pullbackExtreme);
+   double impulseSize = MathAbs(m_scalpState.impulseExtreme - m_scalpState.invalidationLevel);
+   m_scalpState.pullbackType = Scalp_AnalyzePullback(m_scalpState.pullbackBarCount, impulseSize, pbDist, atr);
+
+   // 2. Calculate Pressure & Volatility Compression Score
+   m_scalpState.pressureScore = Scalp_CalculatePressureScore(rates, copied, atr, emaVal, isBuy);
+
+   // 3. S/R Proximity & Room Calculation
+   double slPrice = isBuy ? (m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize))
+                          : (m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize));
+   double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   if(!Scalp_CheckSRProximity(currentPrice, slPrice, isBuy)) return false;
+   double srRoomR = Scalp_GetSRRoomR(currentPrice, slPrice, isBuy);
+
+   // 4. Calculate Composite Setup Score & Grade
+   m_scalpState.setupScore = Scalp_CalculateSetupScore(m_scalpState.trendRegime, m15Regime,
+                                                      m_scalpState.pullbackType, m_scalpState.pressureScore,
+                                                      rates[1], isBuy, atr, srRoomR, m_scalpState.setupGrade);
+
+   // 5. Quality Filter Gates
+   if(InpScalpUsePressureEngine && m_scalpState.pressureScore < InpScalpMinPressureScore)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP REJECT] %s: Pressure score too low (%.2f < %.2f)",
+                     baseTag, m_scalpState.pressureScore, InpScalpMinPressureScore);
+      return false;
+   }
+
+   if(m_scalpState.setupGrade < InpScalpMinSetupGrade)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP REJECT] %s: Setup grade (%s | Scr=%.1f) < Required (%s)",
+                     baseTag, EnumToString(m_scalpState.setupGrade), m_scalpState.setupScore, EnumToString(InpScalpMinSetupGrade));
+      return false;
+   }
+
+   // 6. Volume Confirmation (if active)
+   if(!Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1)) return false;
+
+   // 7. Order Execution with Grade Tag
+   string tag = StringFormat("%s [%s|Scr=%.0f|Prs=%.2f]", baseTag, EnumToString(m_scalpState.setupGrade), m_scalpState.setupScore, m_scalpState.pressureScore);
+   double triggerPrice = isBuy ? rates[1].high : rates[1].low;
+
+   if(Scalp_ExecuteOrder(isBuy, triggerPrice, slPrice, tag))
+   {
+      m_scalpState.state = SCALP_STATE_IN_POSITION;
+      return true;
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| SCALPING ENGINE: FINITE STATE MACHINE UPDATE                     |
 //+------------------------------------------------------------------+
-void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_TREND m5Trend, double m5Invalidation, double m5ImpulseExtreme, ENUM_MARKET_TREND m15Trend)
+void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied,
+                             ENUM_MARKET_TREND m5Trend, double m5Invalidation, double m5ImpulseExtreme,
+                             ENUM_MARKET_TREND m15Trend,
+                             ENUM_SCALP_TREND_REGIME m5Regime, ENUM_SCALP_TREND_REGIME m15Regime)
 {
    if(copied < 10) return;
 
    // STATE 1: IDLE -> TREND DETECTED
    if(m_scalpState.state == SCALP_STATE_IDLE)
    {
-      if(m5Trend == TREND_BULLISH && m15Trend != TREND_BEARISH)
+      if(m5Trend == TREND_BULLISH && m15Trend != TREND_BEARISH && m15Regime >= REGIME_RANGE)
       {
          m_scalpState.state             = SCALP_STATE_TREND_DETECTED;
          m_scalpState.trendDirection    = +1;
+         m_scalpState.trendRegime       = m5Regime;
          m_scalpState.invalidationLevel = m5Invalidation;
          m_scalpState.impulseExtreme    = m5ImpulseExtreme;
          m_scalpState.impulseTime       = rates[1].time;
          m_scalpState.pullbackBarCount  = 0;
          if(InpEnableDebugLog)
-            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BULL) ImpulseExtreme=%.5f Invalidation=%.5f", m5ImpulseExtreme, m5Invalidation);
+            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BULL|Regime=%s) Impulse=%.5f Inval=%.5f",
+                        EnumToString(m5Regime), m5ImpulseExtreme, m5Invalidation);
       }
-      else if(m5Trend == TREND_BEARISH && m15Trend != TREND_BULLISH)
+      else if(m5Trend == TREND_BEARISH && m15Trend != TREND_BULLISH && m15Regime <= REGIME_RANGE)
       {
          m_scalpState.state             = SCALP_STATE_TREND_DETECTED;
          m_scalpState.trendDirection    = -1;
+         m_scalpState.trendRegime       = m5Regime;
          m_scalpState.invalidationLevel = m5Invalidation;
          m_scalpState.impulseExtreme    = m5ImpulseExtreme;
          m_scalpState.impulseTime       = rates[1].time;
          m_scalpState.pullbackBarCount  = 0;
          if(InpEnableDebugLog)
-            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BEAR) ImpulseExtreme=%.5f Invalidation=%.5f", m5ImpulseExtreme, m5Invalidation);
+            PrintFormat("[SCALP FSM] IDLE -> TREND_DETECTED (BEAR|Regime=%s) Impulse=%.5f Inval=%.5f",
+                        EnumToString(m5Regime), m5ImpulseExtreme, m5Invalidation);
       }
       return;
    }
@@ -2996,7 +3446,6 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
          }
          if(rates[1].high > m_scalpState.impulseExtreme)
          {
-            // Trend resumed without H2
             m_scalpState.state = SCALP_STATE_IDLE;
             return;
          }
@@ -3022,7 +3471,6 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
          }
          if(rates[1].low < m_scalpState.impulseExtreme)
          {
-            // Trend resumed without L2
             m_scalpState.state = SCALP_STATE_IDLE;
             return;
          }
@@ -3071,22 +3519,8 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
             double buffer = InpScalpBreakBufferPoints * m_point;
             if(rates[1].high >= (m_scalpState.h2TriggerPrice + buffer))
             {
-               if(Scalp_CheckSignalConfirmation(rates[1], true))
-               {
-                  double slPrice = m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize);
-                  double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-                  if(Scalp_CheckSRProximity(ask, slPrice, true))
-                  {
-                     if(Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
-                     {
-                        if(Scalp_ExecuteOrder(true, rates[1].high, slPrice, "SCALP_H2"))
-                        {
-                           m_scalpState.state = SCALP_STATE_IN_POSITION;
-                           return;
-                        }
-                     }
-                  }
-               }
+               if(Scalp_EvaluateAndExecuteEntry(true, rates, copied, m15Regime, "SCALP_H2"))
+                  return;
             }
             m_scalpState.state = SCALP_STATE_SECOND_ENTRY_READY;
             if(InpEnableDebugLog)
@@ -3116,22 +3550,8 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
             double buffer = InpScalpBreakBufferPoints * m_point;
             if(rates[1].low <= (m_scalpState.l2TriggerPrice - buffer))
             {
-               if(Scalp_CheckSignalConfirmation(rates[1], false))
-               {
-                  double slPrice = m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize);
-                  double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-                  if(Scalp_CheckSRProximity(bid, slPrice, false))
-                  {
-                     if(Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
-                     {
-                        if(Scalp_ExecuteOrder(false, rates[1].low, slPrice, "SCALP_L2"))
-                        {
-                           m_scalpState.state = SCALP_STATE_IN_POSITION;
-                           return;
-                        }
-                     }
-                  }
-               }
+               if(Scalp_EvaluateAndExecuteEntry(false, rates, copied, m15Regime, "SCALP_L2"))
+                  return;
             }
             m_scalpState.state = SCALP_STATE_SECOND_ENTRY_READY;
             if(InpEnableDebugLog)
@@ -3153,18 +3573,10 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
          }
 
          double buffer = InpScalpBreakBufferPoints * m_point;
-         if(rates[1].high >= (m_scalpState.h2TriggerPrice + buffer) && Scalp_CheckSignalConfirmation(rates[1], true))
+         if(rates[1].high >= (m_scalpState.h2TriggerPrice + buffer))
          {
-            double slPrice = m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize);
-            double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-            if(Scalp_CheckSRProximity(ask, slPrice, true) && Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
-            {
-               if(Scalp_ExecuteOrder(true, rates[1].high, slPrice, "SCALP_H2"))
-               {
-                  m_scalpState.state = SCALP_STATE_IN_POSITION;
-                  return;
-               }
-            }
+            if(Scalp_EvaluateAndExecuteEntry(true, rates, copied, m15Regime, "SCALP_H2"))
+               return;
          }
       }
       else if(m_scalpState.trendDirection == -1)
@@ -3176,22 +3588,14 @@ void Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, ENUM_MARKET_T
          }
 
          double buffer = InpScalpBreakBufferPoints * m_point;
-         if(rates[1].low <= (m_scalpState.l2TriggerPrice - buffer) && Scalp_CheckSignalConfirmation(rates[1], false))
+         if(rates[1].low <= (m_scalpState.l2TriggerPrice - buffer))
          {
-            double slPrice = m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize);
-            double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-            if(Scalp_CheckSRProximity(bid, slPrice, false) && Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1))
-            {
-               if(Scalp_ExecuteOrder(false, rates[1].low, slPrice, "SCALP_L2"))
-               {
-                  m_scalpState.state = SCALP_STATE_IN_POSITION;
-                  return;
-               }
-            }
+            if(Scalp_EvaluateAndExecuteEntry(false, rates, copied, m15Regime, "SCALP_L2"))
+               return;
          }
       }
 
-      // If not triggered, timeout setup back to IDLE
+      // If not triggered on Bar 2, timeout setup back to IDLE
       m_scalpState.state = SCALP_STATE_IDLE;
       return;
    }
@@ -3268,6 +3672,12 @@ void Scalp_OnTick()
       ArraySetAsSeries(rates, true);
       if(CopyRates(_Symbol, InpScalpExecutionTF, 0, 5, rates) >= 5)
       {
+         double atrVal[1];
+         double atr = (CopyBuffer(m_hScalpAtr, 0, 1, 1, atrVal) > 0 && atrVal[0] > 0.0) ? atrVal[0] : (10.0 * m_point);
+
+         double fastEma[1];
+         double emaVal = (CopyBuffer(m_hScalpEma, 0, 1, 1, fastEma) > 0) ? fastEma[0] : rates[1].close;
+
          for(int p = PositionsTotal() - 1; p >= 0; p--)
          {
             if(!m_position.SelectByIndex(p)) continue;
@@ -3281,58 +3691,166 @@ void Scalp_OnTick()
             double profitPts = (type == POSITION_TYPE_BUY) ? (rates[1].close - openPrice) / m_point : (openPrice - rates[1].close) / m_point;
             double currentR  = (initialRiskPts > 0.0) ? (profitPts / initialRiskPts) : 0.0;
 
-            // Dynamic Exit A: Momentum Stall (N bars in profit without progress)
-            if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= 0.5 && m_scalpBarsInTrade >= InpScalpStallBars)
+            // ==========================================================
+            // EXIT ENGINE MODE A: CLASSIC V5.00 EXIT LOGIC (FOR A/B TEST)
+            // ==========================================================
+            if(InpScalpExitEngineMode == SCALP_EXIT_MODE_CLASSIC_V5)
             {
-               Scalp_ClosePosition(ticket, SCALP_EXIT_MOMENTUM_STALL,
-                                   StringFormat("Stall for %d bars in profit (R=%.2f)", m_scalpBarsInTrade, currentR));
+               if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= 0.5 && m_scalpBarsInTrade >= InpScalpStallBars)
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_MOMENTUM_STALL,
+                                      StringFormat("Stall for %d bars in profit (R=%.2f)", m_scalpBarsInTrade, currentR));
+                  continue;
+               }
+
+               if(InpScalpDynamicExits && InpScalpExitOnOppositeBar)
+               {
+                  if(type == POSITION_TYPE_BUY)
+                  {
+                     bool oppEngulfing = (rates[1].close < rates[1].open && rates[1].close < rates[2].low);
+                     double upperWick = rates[1].high - MathMax(rates[1].open, rates[1].close);
+                     double rRange = rates[1].high - rates[1].low;
+                     bool oppPin = (rRange > 0.0 && (upperWick / rRange) >= 0.60 && rates[1].close < (rates[1].low + rRange * 0.40));
+                     if(oppEngulfing || oppPin)
+                     {
+                        Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bearish PA Candle");
+                        continue;
+                     }
+                  }
+                  else
+                  {
+                     bool oppEngulfing = (rates[1].close > rates[1].open && rates[1].close > rates[2].high);
+                     double lowerWick = MathMin(rates[1].open, rates[1].close) - rates[1].low;
+                     double rRange = rates[1].high - rates[1].low;
+                     bool oppPin = (rRange > 0.0 && (lowerWick / rRange) >= 0.60 && rates[1].close > (rates[1].high - rRange * 0.40));
+                     if(oppEngulfing || oppPin)
+                     {
+                        Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bullish PA Candle");
+                        continue;
+                     }
+                  }
+               }
+
+               if(InpScalpDynamicExits && InpScalpExitOnStructureBreak && m_scalpState.invalidationLevel > 0.0)
+               {
+                  if(type == POSITION_TYPE_BUY && rates[1].close < m_scalpState.invalidationLevel)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                         StringFormat("Close %.5f < Micro HL %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                     continue;
+                  }
+                  if(type == POSITION_TYPE_SELL && rates[1].close > m_scalpState.invalidationLevel)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                         StringFormat("Close %.5f > Micro LH %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                     continue;
+                  }
+               }
                continue;
             }
 
-            // Dynamic Exit B: Strong Opposite PA Candle
-            if(InpScalpDynamicExits && InpScalpExitOnOppositeBar)
+            // ==========================================================
+            // EXIT ENGINE MODE B: INTELLIGENT MULTI-FACTOR EXIT (V6.00)
+            // ==========================================================
+            // Guard 1: Minimum Trade Maturation (Bars 1 & 2 breathe unless catastrophic break)
+            if(m_scalpBarsInTrade <= InpScalpMinHoldBars)
             {
-               if(type == POSITION_TYPE_BUY)
+               // Only exit on structural breakdown below invalidation
+               if(InpScalpExitOnStructureBreak && m_scalpState.invalidationLevel > 0.0)
                {
-                  bool oppEngulfing = (rates[1].close < rates[1].open && rates[1].close < rates[2].low);
-                  double upperWick = rates[1].high - MathMax(rates[1].open, rates[1].close);
-                  double rRange = rates[1].high - rates[1].low;
-                  bool oppPin = (rRange > 0.0 && (upperWick / rRange) >= 0.60 && rates[1].close < (rates[1].low + rRange * 0.40));
-                  if(oppEngulfing || oppPin)
+                  if(type == POSITION_TYPE_BUY && rates[1].close < m_scalpState.invalidationLevel)
                   {
-                     Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bearish PA Candle");
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                         StringFormat("Early Inval: Close %.5f < HL %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                     continue;
+                  }
+                  if(type == POSITION_TYPE_SELL && rates[1].close > m_scalpState.invalidationLevel)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
+                                         StringFormat("Early Inval: Close %.5f > LH %.5f", rates[1].close, m_scalpState.invalidationLevel));
                      continue;
                   }
                }
-               else // Sell
-               {
-                  bool oppEngulfing = (rates[1].close > rates[1].open && rates[1].close > rates[2].high);
-                  double lowerWick = MathMin(rates[1].open, rates[1].close) - rates[1].low;
-                  double rRange = rates[1].high - rates[1].low;
-                  bool oppPin = (rRange > 0.0 && (lowerWick / rRange) >= 0.60 && rates[1].close > (rates[1].high - rRange * 0.40));
-                  if(oppEngulfing || oppPin)
-                  {
-                     Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Bullish PA Candle");
-                     continue;
-                  }
-               }
+               // Let the trade develop during maturation bars!
+               continue;
             }
 
-            // Dynamic Exit C: Micro-Structure Invalidation Break
-            if(InpScalpDynamicExits && InpScalpExitOnStructureBreak && m_scalpState.invalidationLevel > 0.0)
+            // Guard 2: Micro-Structure Invalidation Exit (Strict)
+            if(InpScalpExitOnStructureBreak && m_scalpState.invalidationLevel > 0.0)
             {
                if(type == POSITION_TYPE_BUY && rates[1].close < m_scalpState.invalidationLevel)
                {
                   Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
-                                      StringFormat("Close %.5f < Micro HL %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                                      StringFormat("Structure Break: Close %.5f < HL %.5f", rates[1].close, m_scalpState.invalidationLevel));
                   continue;
                }
                if(type == POSITION_TYPE_SELL && rates[1].close > m_scalpState.invalidationLevel)
                {
                   Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK,
-                                      StringFormat("Close %.5f > Micro LH %.5f", rates[1].close, m_scalpState.invalidationLevel));
+                                      StringFormat("Structure Break: Close %.5f > LH %.5f", rates[1].close, m_scalpState.invalidationLevel));
                   continue;
                }
+            }
+
+            // Guard 3: Context-Aware Momentum Stall
+            // Only triggers if in solid profit (>= InpScalpStallMinR) AND price actually crosses EMA or produces 2 opposing bars
+            if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= InpScalpStallMinR && m_scalpBarsInTrade >= InpScalpStallBars)
+            {
+               bool isRealStall = false;
+               if(type == POSITION_TYPE_BUY)
+               {
+                  bool closeBelowEma = (rates[1].close < emaVal);
+                  bool twoBearBars   = (rates[1].close < rates[1].open && rates[2].close < rates[2].open);
+                  if(closeBelowEma || twoBearBars) isRealStall = true;
+               }
+               else
+               {
+                  bool closeAboveEma = (rates[1].close > emaVal);
+                  bool twoBullBars   = (rates[1].close > rates[1].open && rates[2].close > rates[2].open);
+                  if(closeAboveEma || twoBullBars) isRealStall = true;
+               }
+
+               if(isRealStall)
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_MOMENTUM_STALL,
+                                      StringFormat("Momentum Stall for %d bars in profit (R=%.2f)", m_scalpBarsInTrade, currentR));
+                  continue;
+               }
+            }
+
+            // Guard 4: Counter-Trend Severity Classifier
+            if(InpScalpDynamicExits && InpScalpExitOnOppositeBar)
+            {
+               ENUM_SCALP_COUNTERTREND_SEVERITY ctSev = Scalp_ClassifyCounterTrendMove(rates[1], rates[2],
+                                                                                      (type == POSITION_TYPE_BUY),
+                                                                                      atr, emaVal, m_scalpState.invalidationLevel);
+               if(ctSev == COUNTER_STRUCTURE_BREAK)
+               {
+                  Scalp_ClosePosition(ticket, SCALP_EXIT_STRUCTURE_BREAK, "Counter-Trend Structure Break");
+                  continue;
+               }
+               else if(ctSev == COUNTER_STRONG)
+               {
+                  // If in profit, exit to lock in accrued gain
+                  if(currentR >= 0.5)
+                  {
+                     Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL,
+                                         StringFormat("Strong Opposing Momentum Bar (R=%.2f)", currentR));
+                     continue;
+                  }
+                  // If in small drawdown (-0.5R to 0R), only exit if trend regime has deteriorated
+                  else if(currentR < 0.0)
+                  {
+                     double fastVal, slowVal;
+                     ENUM_SCALP_TREND_REGIME curRegime = Scalp_ClassifyTrendRegime(InpScalpExecutionTF, fastVal, slowVal);
+                     if(curRegime == REGIME_RANGE || (type == POSITION_TYPE_BUY && curRegime <= REGIME_WEAK_BEAR) || (type == POSITION_TYPE_SELL && curRegime >= REGIME_WEAK_BULL))
+                     {
+                        Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL, "Strong Reversal with Trend Regime Loss");
+                        continue;
+                     }
+                  }
+               }
+               // Note: COUNTER_MINOR and COUNTER_MODERATE are HELD! Trailing stop handles moderate retracements.
             }
          }
       }
@@ -3349,7 +3867,7 @@ void Scalp_OnTick()
    UpdateSwingsAndStructure();
    UpdateSRZones();
 
-   // 8. Detect Market Structure on Execution TF (M5) and Context TF (M15)
+   // 8. Detect Market Structure & Granular Trend Regimes (M5 Execution & M15 Context)
    SSwingPivot m5Pivots[];
    ENUM_MARKET_TREND m5Trend = TREND_RANGE;
    double m5Invalidation = 0.0, m5ImpulseExtreme = 0.0;
@@ -3360,6 +3878,27 @@ void Scalp_OnTick()
    double m15Invalidation = 0.0, m15ImpulseExtreme = 0.0;
    Scalp_DetectMarketStructure(InpScalpContextTF, m15Pivots, m15Trend, m15Invalidation, m15ImpulseExtreme);
 
+   double m5FastEmaVal = 0.0, m5SlowEmaVal = 0.0;
+   ENUM_SCALP_TREND_REGIME m5Regime = Scalp_ClassifyTrendRegime(InpScalpExecutionTF, m5FastEmaVal, m5SlowEmaVal);
+
+   double m15FastEmaVal = 0.0, m15SlowEmaVal = 0.0;
+   ENUM_SCALP_TREND_REGIME m15Regime = Scalp_ClassifyTrendRegime(InpScalpContextTF, m15FastEmaVal, m15SlowEmaVal);
+
+   // Optional H1 Macro Filter Check
+   if(InpScalpUseMacroH1 && m_hScalpEmaH1 != INVALID_HANDLE)
+   {
+      double h1Ema[];
+      ArraySetAsSeries(h1Ema, true);
+      if(CopyBuffer(m_hScalpEmaH1, 0, 1, 2, h1Ema) >= 2)
+      {
+         double h1Close = iClose(_Symbol, PERIOD_H1, 1);
+         if(m5Trend == TREND_BULLISH && h1Close < h1Ema[0] && h1Ema[0] <= h1Ema[1])
+            m5Trend = TREND_RANGE; // Vetoed by H1 macro downtrend
+         else if(m5Trend == TREND_BEARISH && h1Close > h1Ema[0] && h1Ema[0] >= h1Ema[1])
+            m5Trend = TREND_RANGE; // Vetoed by H1 macro uptrend
+      }
+   }
+
    // 9. Fetch Closed Rates on Execution Timeframe
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
@@ -3367,6 +3906,6 @@ void Scalp_OnTick()
    if(copied < 30) return;
 
    // 10. Advance State Machine and Generate Scalping Trades
-   Scalp_UpdateStateMachine(rates, copied, m5Trend, m5Invalidation, m5ImpulseExtreme, m15Trend);
+   Scalp_UpdateStateMachine(rates, copied, m5Trend, m5Invalidation, m5ImpulseExtreme, m15Trend, m5Regime, m15Regime);
 }
 //+------------------------------------------------------------------+

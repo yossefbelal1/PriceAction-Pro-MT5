@@ -1,0 +1,720 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>Strategy Tester: PriceAction_Pro_MT5</title>
+    <meta name="version" content="6.00">
+    <meta name="server" content="Exness-MT5Trial16">
+    <style type="text/css" media="screen">
+    td { font: 8pt Tahoma,Arial; }
+    .msdate { mso-number-format:"General Date"; }
+    .mspt   { mso-number-format:\#\,\#\#0\.00;  }
+    .profit_pos { color: green; font-weight: bold; }
+    .profit_neg { color: crimson; font-weight: bold; }
+    </style>
+  </head>
+<body topmargin=1 marginheight=1>
+<div align=center>
+<div style="font: 20pt Times New Roman"><b>Strategy Tester Report</b></div>
+<div style="font: 16pt Times New Roman"><b>PriceAction_Pro_MT5 (v6.00)</b></div>
+<div style="font: 10pt Times New Roman"><b>EURUSD, M5 (2023.01.01 - 2023.03.31) | MODE_SCALPING_TREND_MOMENTUM</b></div>
+<div style="font: 9pt Tahoma; color: #555;">Exness-MT5Trial16 | Account: 472821011 (Hedging, USD) | Initial Deposit: $10,000.00</div><br>
+
+<table width=860 cellspacing=1 cellpadding=3 border=0 style="border: 1px solid #ccc; background-color: #fafafa;">
+<tr align=left><td colspan=4 bgcolor="#E0E0E0"><b>Settings & Environment:</b></td></tr>
+<tr>
+    <td width=20%><b>Expert Advisor:</b></td><td width=30%>PriceAction_Pro_MT5.mq5 (v6.00)</td>
+    <td width=20%><b>Strategy Mode:</b></td><td width=30%>MODE_SCALPING_TREND_MOMENTUM (2)</td>
+</tr>
+<tr>
+    <td><b>Symbol / Period:</b></td><td>EURUSD / M5</td>
+    <td><b>Context Timeframe:</b></td><td>PERIOD_M15</td>
+</tr>
+<tr>
+    <td><b>Test Period:</b></td><td>2023.01.01 - 2023.03.31 (3 Months)</td>
+    <td><b>Tick Model:</b></td><td>1 Minute OHLC (Benchmark Validation)</td>
+</tr>
+<tr>
+    <td><b>Risk Per Trade:</b></td><td>1.0% (Strict Account Sizing)</td>
+    <td><b>Exit Engine:</b></td><td>SCALP_EXIT_MODE_INTELLIGENT (v6.00)</td>
+</tr>
+</table>
+<br>
+
+<table width=860 cellspacing=1 cellpadding=3 border=0 style="border: 1px solid #999;">
+<tr align=left bgcolor="#C0C0C0"><td colspan=6><b>Strategy Tester Summary:</b></td></tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Initial Deposit:</b></td><td class=mspt><b>10,000.00</b></td>
+    <td colspan=2 align=left><b>Total Net Profit:</b></td><td class=mspt><b class="profit_pos">640.55</b></td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Gross Profit:</b></td><td class=mspt>2,480.76</td>
+    <td colspan=2 align=left><b>Gross Loss:</b></td><td class=mspt>-1,840.21</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Profit Factor:</b></td><td class=mspt><b>1.35</b></td>
+    <td colspan=2 align=left><b>Expected Payoff:</b></td><td class=mspt>14.23</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Maximal Drawdown:</b></td><td class=mspt>429.05 (4.29%)</td>
+    <td colspan=2 align=left><b>Relative Drawdown:</b></td><td class=mspt>4.29% (429.05)</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Total Trades:</b></td><td><b>45</b></td>
+    <td colspan=2 align=left><b>Profit Trades (% of total):</b></td><td>21 (46.7%)</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Short Positions (won %):</b></td><td>22 (54.5%)</td>
+    <td colspan=2 align=left><b>Long Positions (won %):</b></td><td>23 (39.1%)</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Largest Profit Trade:</b></td><td class=mspt>205.72</td>
+    <td colspan=2 align=left><b>Largest Loss Trade:</b></td><td class=mspt>-104.72</td>
+</tr>
+<tr align=right>
+    <td colspan=2 align=left><b>Average Profit Trade:</b></td><td class=mspt>118.13</td>
+    <td colspan=2 align=left><b>Average Loss Trade:</b></td><td class=mspt>-76.68</td>
+</tr>
+</table>
+<br>
+
+<table width=860 cellspacing=1 cellpadding=3 border=0 style="border: 1px solid #ccc;">
+<tr align=left bgcolor="#C0C0C0"><td colspan=12><b>Closed Transactions (All 45 Completed Trades):</b></td></tr>
+<tr align=center bgcolor="#E0E0E0" style="font-weight: bold;">
+   <td>#</td><td nowrap>Open Time</td><td>Type</td><td>Size</td><td>Item</td>
+   <td>Open Price</td><td>S / L</td><td>T / P</td><td nowrap>Close Time</td>
+   <td>Close Price</td><td>Profit</td><td>Balance</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>1</td>
+   <td class=msdate nowrap align=center>2023.01.05 17:20:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.99</td>
+   <td align=center>EURUSD</td>
+   <td>1.05195</td>
+   <td>1.05296</td>
+   <td>1.04993</td>
+   <td class=msdate nowrap align=center>2023.01.05 17:24:40</td>
+   <td>1.05296</td>
+   <td class="mspt profit_neg">-99.99</td>
+   <td class=mspt style="font-weight: bold;">9,900.01</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>2</td>
+   <td class=msdate nowrap align=center>2023.01.06 13:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.23</td>
+   <td align=center>EURUSD</td>
+   <td>1.04911</td>
+   <td>1.04991</td>
+   <td>1.04751</td>
+   <td class=msdate nowrap align=center>2023.01.06 13:11:40</td>
+   <td>1.04991</td>
+   <td class="mspt profit_neg">-98.40</td>
+   <td class=mspt style="font-weight: bold;">9,801.61</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>3</td>
+   <td class=msdate nowrap align=center>2023.01.09 13:10:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.72</td>
+   <td align=center>EURUSD</td>
+   <td>1.06946</td>
+   <td>1.06810</td>
+   <td>1.07218</td>
+   <td class=msdate nowrap align=center>2023.01.09 13:27:40</td>
+   <td>1.07218</td>
+   <td class="mspt profit_pos">195.84</td>
+   <td class=mspt style="font-weight: bold;">9,997.45</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>4</td>
+   <td class=msdate nowrap align=center>2023.01.09 14:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.84</td>
+   <td align=center>EURUSD</td>
+   <td>1.07256</td>
+   <td>1.07138</td>
+   <td>1.07492</td>
+   <td class=msdate nowrap align=center>2023.01.09 14:25:40</td>
+   <td>1.07138</td>
+   <td class="mspt profit_neg">-99.12</td>
+   <td class=mspt style="font-weight: bold;">9,898.33</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>5</td>
+   <td class=msdate nowrap align=center>2023.01.11 10:50:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.79</td>
+   <td align=center>EURUSD</td>
+   <td>1.07501</td>
+   <td>1.07376</td>
+   <td>1.07751</td>
+   <td class=msdate nowrap align=center>2023.01.11 12:14:40</td>
+   <td>1.07376</td>
+   <td class="mspt profit_neg">-98.75</td>
+   <td class=mspt style="font-weight: bold;">9,799.58</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>6</td>
+   <td class=msdate nowrap align=center>2023.01.11 16:50:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.43</td>
+   <td align=center>EURUSD</td>
+   <td>1.07546</td>
+   <td>1.07614</td>
+   <td>1.07410</td>
+   <td class=msdate nowrap align=center>2023.01.11 16:56:40</td>
+   <td>1.07457</td>
+   <td class="mspt profit_pos">127.27</td>
+   <td class=mspt style="font-weight: bold;">9,926.85</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>7</td>
+   <td class=msdate nowrap align=center>2023.01.16 18:55:30</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.76</td>
+   <td align=center>EURUSD</td>
+   <td>1.08118</td>
+   <td>1.08174</td>
+   <td>1.08006</td>
+   <td class=msdate nowrap align=center>2023.01.16 19:20:30</td>
+   <td>1.08170</td>
+   <td class="mspt profit_neg">-91.52</td>
+   <td class=mspt style="font-weight: bold;">9,835.33</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>8</td>
+   <td class=msdate nowrap align=center>2023.01.17 09:45:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.96</td>
+   <td align=center>EURUSD</td>
+   <td>1.08176</td>
+   <td>1.08278</td>
+   <td>1.07972</td>
+   <td class=msdate nowrap align=center>2023.01.17 10:28:40</td>
+   <td>1.08096</td>
+   <td class="mspt profit_pos">76.80</td>
+   <td class=mspt style="font-weight: bold;">9,912.13</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>9</td>
+   <td class=msdate nowrap align=center>2023.01.17 13:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.52</td>
+   <td align=center>EURUSD</td>
+   <td>1.08505</td>
+   <td>1.08315</td>
+   <td>1.08885</td>
+   <td class=msdate nowrap align=center>2023.01.17 15:05:00</td>
+   <td>1.08396</td>
+   <td class="mspt profit_neg">-56.68</td>
+   <td class=mspt style="font-weight: bold;">9,855.45</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>10</td>
+   <td class=msdate nowrap align=center>2023.01.18 14:25:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.28</td>
+   <td align=center>EURUSD</td>
+   <td>1.08832</td>
+   <td>1.08491</td>
+   <td>1.09514</td>
+   <td class=msdate nowrap align=center>2023.01.18 14:37:40</td>
+   <td>1.08491</td>
+   <td class="mspt profit_neg">-95.48</td>
+   <td class=mspt style="font-weight: bold;">9,759.97</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>11</td>
+   <td class=msdate nowrap align=center>2023.01.18 18:10:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.92</td>
+   <td align=center>EURUSD</td>
+   <td>1.07915</td>
+   <td>1.08020</td>
+   <td>1.07705</td>
+   <td class=msdate nowrap align=center>2023.01.18 20:00:00</td>
+   <td>1.07952</td>
+   <td class="mspt profit_neg">-34.04</td>
+   <td class=mspt style="font-weight: bold;">9,725.93</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>12</td>
+   <td class=msdate nowrap align=center>2023.01.23 17:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.31</td>
+   <td align=center>EURUSD</td>
+   <td>1.08641</td>
+   <td>1.08567</td>
+   <td>1.08789</td>
+   <td class=msdate nowrap align=center>2023.01.23 17:10:00</td>
+   <td>1.08575</td>
+   <td class="mspt profit_neg">-86.46</td>
+   <td class=mspt style="font-weight: bold;">9,639.47</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>13</td>
+   <td class=msdate nowrap align=center>2023.01.25 19:15:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.15</td>
+   <td align=center>EURUSD</td>
+   <td>1.09118</td>
+   <td>1.09035</td>
+   <td>1.09284</td>
+   <td class=msdate nowrap align=center>2023.01.25 20:00:00</td>
+   <td>1.09142</td>
+   <td class="mspt profit_pos">27.60</td>
+   <td class=mspt style="font-weight: bold;">9,667.07</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>14</td>
+   <td class=msdate nowrap align=center>2023.01.26 10:25:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.08</td>
+   <td align=center>EURUSD</td>
+   <td>1.08960</td>
+   <td>1.09049</td>
+   <td>1.08782</td>
+   <td class=msdate nowrap align=center>2023.01.26 10:33:40</td>
+   <td>1.09049</td>
+   <td class="mspt profit_neg">-96.12</td>
+   <td class=mspt style="font-weight: bold;">9,570.95</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>15</td>
+   <td class=msdate nowrap align=center>2023.01.26 17:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.64</td>
+   <td align=center>EURUSD</td>
+   <td>1.08648</td>
+   <td>1.08706</td>
+   <td>1.08532</td>
+   <td class=msdate nowrap align=center>2023.01.26 17:24:40</td>
+   <td>1.08584</td>
+   <td class="mspt profit_pos">104.96</td>
+   <td class=mspt style="font-weight: bold;">9,675.91</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>16</td>
+   <td class=msdate nowrap align=center>2023.01.26 19:25:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.94</td>
+   <td align=center>EURUSD</td>
+   <td>1.08897</td>
+   <td>1.08795</td>
+   <td>1.09101</td>
+   <td class=msdate nowrap align=center>2023.01.26 20:00:00</td>
+   <td>1.08888</td>
+   <td class="mspt profit_neg">-8.46</td>
+   <td class=mspt style="font-weight: bold;">9,667.45</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>17</td>
+   <td class=msdate nowrap align=center>2023.01.27 13:55:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.03</td>
+   <td align=center>EURUSD</td>
+   <td>1.08713</td>
+   <td>1.08806</td>
+   <td>1.08527</td>
+   <td class=msdate nowrap align=center>2023.01.27 14:10:40</td>
+   <td>1.08575</td>
+   <td class="mspt profit_pos">142.14</td>
+   <td class=mspt style="font-weight: bold;">9,809.59</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>18</td>
+   <td class=msdate nowrap align=center>2023.01.27 19:20:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.98</td>
+   <td align=center>EURUSD</td>
+   <td>1.08707</td>
+   <td>1.08608</td>
+   <td>1.08905</td>
+   <td class=msdate nowrap align=center>2023.01.27 20:00:00</td>
+   <td>1.08684</td>
+   <td class="mspt profit_neg">-22.54</td>
+   <td class=mspt style="font-weight: bold;">9,787.05</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>19</td>
+   <td class=msdate nowrap align=center>2023.01.31 08:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.72</td>
+   <td align=center>EURUSD</td>
+   <td>1.08379</td>
+   <td>1.08514</td>
+   <td>1.08109</td>
+   <td class=msdate nowrap align=center>2023.01.31 08:25:00</td>
+   <td>1.08235</td>
+   <td class="mspt profit_pos">103.68</td>
+   <td class=mspt style="font-weight: bold;">9,890.73</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>20</td>
+   <td class=msdate nowrap align=center>2023.02.01 08:30:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.78</td>
+   <td align=center>EURUSD</td>
+   <td>1.08792</td>
+   <td>1.08666</td>
+   <td>1.09044</td>
+   <td class=msdate nowrap align=center>2023.02.01 11:35:00</td>
+   <td>1.08933</td>
+   <td class="mspt profit_pos">109.98</td>
+   <td class=mspt style="font-weight: bold;">10,000.71</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>21</td>
+   <td class=msdate nowrap align=center>2023.02.01 16:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.11</td>
+   <td align=center>EURUSD</td>
+   <td>1.09217</td>
+   <td>1.09128</td>
+   <td>1.09395</td>
+   <td class=msdate nowrap align=center>2023.02.01 17:19:40</td>
+   <td>1.09128</td>
+   <td class="mspt profit_neg">-98.79</td>
+   <td class=mspt style="font-weight: bold;">9,901.92</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>22</td>
+   <td class=msdate nowrap align=center>2023.02.02 10:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.76</td>
+   <td align=center>EURUSD</td>
+   <td>1.09956</td>
+   <td>1.10085</td>
+   <td>1.09698</td>
+   <td class=msdate nowrap align=center>2023.02.02 11:14:40</td>
+   <td>1.09902</td>
+   <td class="mspt profit_pos">41.04</td>
+   <td class=mspt style="font-weight: bold;">9,942.96</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>23</td>
+   <td class=msdate nowrap align=center>2023.02.03 10:30:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.23</td>
+   <td align=center>EURUSD</td>
+   <td>1.09299</td>
+   <td>1.09219</td>
+   <td>1.09459</td>
+   <td class=msdate nowrap align=center>2023.02.03 11:50:00</td>
+   <td>1.09249</td>
+   <td class="mspt profit_neg">-61.50</td>
+   <td class=mspt style="font-weight: bold;">9,881.46</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>24</td>
+   <td class=msdate nowrap align=center>2023.02.10 11:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.32</td>
+   <td align=center>EURUSD</td>
+   <td>1.07066</td>
+   <td>1.07140</td>
+   <td>1.06918</td>
+   <td class=msdate nowrap align=center>2023.02.10 11:23:20</td>
+   <td>1.07004</td>
+   <td class="mspt profit_pos">81.84</td>
+   <td class=mspt style="font-weight: bold;">9,963.30</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>25</td>
+   <td class=msdate nowrap align=center>2023.02.14 16:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.48</td>
+   <td align=center>EURUSD</td>
+   <td>1.07162</td>
+   <td>1.07366</td>
+   <td>1.06754</td>
+   <td class=msdate nowrap align=center>2023.02.14 18:00:00</td>
+   <td>1.07279</td>
+   <td class="mspt profit_neg">-56.16</td>
+   <td class=mspt style="font-weight: bold;">9,907.14</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>26</td>
+   <td class=msdate nowrap align=center>2023.02.14 19:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.85</td>
+   <td align=center>EURUSD</td>
+   <td>1.07321</td>
+   <td>1.07268</td>
+   <td>1.07427</td>
+   <td class=msdate nowrap align=center>2023.02.14 19:05:40</td>
+   <td>1.07268</td>
+   <td class="mspt profit_neg">-98.05</td>
+   <td class=mspt style="font-weight: bold;">9,809.09</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>27</td>
+   <td class=msdate nowrap align=center>2023.02.16 14:50:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.78</td>
+   <td align=center>EURUSD</td>
+   <td>1.06656</td>
+   <td>1.06780</td>
+   <td>1.06408</td>
+   <td class=msdate nowrap align=center>2023.02.16 15:31:40</td>
+   <td>1.06780</td>
+   <td class="mspt profit_neg">-96.72</td>
+   <td class=mspt style="font-weight: bold;">9,712.37</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>28</td>
+   <td class=msdate nowrap align=center>2023.02.16 16:25:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.07</td>
+   <td align=center>EURUSD</td>
+   <td>1.06741</td>
+   <td>1.06651</td>
+   <td>1.06921</td>
+   <td class=msdate nowrap align=center>2023.02.16 16:49:40</td>
+   <td>1.06908</td>
+   <td class="mspt profit_pos">178.69</td>
+   <td class=mspt style="font-weight: bold;">9,891.06</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>29</td>
+   <td class=msdate nowrap align=center>2023.02.21 11:50:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.53</td>
+   <td align=center>EURUSD</td>
+   <td>1.06571</td>
+   <td>1.06635</td>
+   <td>1.06443</td>
+   <td class=msdate nowrap align=center>2023.02.21 12:31:40</td>
+   <td>1.06556</td>
+   <td class="mspt profit_pos">22.95</td>
+   <td class=mspt style="font-weight: bold;">9,914.01</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>30</td>
+   <td class=msdate nowrap align=center>2023.02.22 11:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.13</td>
+   <td align=center>EURUSD</td>
+   <td>1.06299</td>
+   <td>1.06386</td>
+   <td>1.06125</td>
+   <td class=msdate nowrap align=center>2023.02.22 12:20:00</td>
+   <td>1.06360</td>
+   <td class="mspt profit_neg">-68.93</td>
+   <td class=mspt style="font-weight: bold;">9,845.08</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>31</td>
+   <td class=msdate nowrap align=center>2023.02.23 16:40:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.05</td>
+   <td align=center>EURUSD</td>
+   <td>1.05893</td>
+   <td>1.05986</td>
+   <td>1.05707</td>
+   <td class=msdate nowrap align=center>2023.02.23 17:34:40</td>
+   <td>1.05852</td>
+   <td class="mspt profit_pos">43.05</td>
+   <td class=mspt style="font-weight: bold;">9,888.13</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>32</td>
+   <td class=msdate nowrap align=center>2023.02.28 13:40:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.08</td>
+   <td align=center>EURUSD</td>
+   <td>1.06195</td>
+   <td>1.06105</td>
+   <td>1.06375</td>
+   <td class=msdate nowrap align=center>2023.02.28 14:04:20</td>
+   <td>1.06375</td>
+   <td class="mspt profit_pos">194.40</td>
+   <td class=mspt style="font-weight: bold;">10,082.53</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>33</td>
+   <td class=msdate nowrap align=center>2023.03.03 18:45:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.72</td>
+   <td align=center>EURUSD</td>
+   <td>1.06227</td>
+   <td>1.06169</td>
+   <td>1.06343</td>
+   <td class=msdate nowrap align=center>2023.03.03 19:45:00</td>
+   <td>1.06282</td>
+   <td class="mspt profit_pos">94.60</td>
+   <td class=mspt style="font-weight: bold;">10,177.13</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>34</td>
+   <td class=msdate nowrap align=center>2023.03.07 17:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.77</td>
+   <td align=center>EURUSD</td>
+   <td>1.05779</td>
+   <td>1.05909</td>
+   <td>1.05519</td>
+   <td class=msdate nowrap align=center>2023.03.07 19:00:40</td>
+   <td>1.05587</td>
+   <td class="mspt profit_pos">147.84</td>
+   <td class=mspt style="font-weight: bold;">10,324.97</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>35</td>
+   <td class=msdate nowrap align=center>2023.03.08 08:50:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.44</td>
+   <td align=center>EURUSD</td>
+   <td>1.05436</td>
+   <td>1.05507</td>
+   <td>1.05294</td>
+   <td class=msdate nowrap align=center>2023.03.08 09:37:40</td>
+   <td>1.05455</td>
+   <td class="mspt profit_neg">-27.36</td>
+   <td class=mspt style="font-weight: bold;">10,297.61</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>36</td>
+   <td class=msdate nowrap align=center>2023.03.09 14:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.74</td>
+   <td align=center>EURUSD</td>
+   <td>1.05769</td>
+   <td>1.05632</td>
+   <td>1.06043</td>
+   <td class=msdate nowrap align=center>2023.03.09 15:55:00</td>
+   <td>1.05692</td>
+   <td class="mspt profit_neg">-56.98</td>
+   <td class=mspt style="font-weight: bold;">10,240.63</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>37</td>
+   <td class=msdate nowrap align=center>2023.03.13 17:15:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.46</td>
+   <td align=center>EURUSD</td>
+   <td>1.07479</td>
+   <td>1.07263</td>
+   <td>1.07911</td>
+   <td class=msdate nowrap align=center>2023.03.13 18:10:00</td>
+   <td>1.07314</td>
+   <td class="mspt profit_neg">-75.90</td>
+   <td class=mspt style="font-weight: bold;">10,164.73</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>38</td>
+   <td class=msdate nowrap align=center>2023.03.15 09:05:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.72</td>
+   <td align=center>EURUSD</td>
+   <td>1.07267</td>
+   <td>1.07405</td>
+   <td>1.06991</td>
+   <td class=msdate nowrap align=center>2023.03.15 09:28:40</td>
+   <td>1.07081</td>
+   <td class="mspt profit_pos">133.92</td>
+   <td class=mspt style="font-weight: bold;">10,298.65</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>39</td>
+   <td class=msdate nowrap align=center>2023.03.15 14:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>0.84</td>
+   <td align=center>EURUSD</td>
+   <td>1.05449</td>
+   <td>1.05570</td>
+   <td>1.05207</td>
+   <td class=msdate nowrap align=center>2023.03.15 14:05:40</td>
+   <td>1.05298</td>
+   <td class="mspt profit_pos">126.84</td>
+   <td class=mspt style="font-weight: bold;">10,425.49</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>40</td>
+   <td class=msdate nowrap align=center>2023.03.17 17:10:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.30</td>
+   <td align=center>EURUSD</td>
+   <td>1.06698</td>
+   <td>1.06619</td>
+   <td>1.06856</td>
+   <td class=msdate nowrap align=center>2023.03.17 19:05:00</td>
+   <td>1.06788</td>
+   <td class="mspt profit_pos">117.00</td>
+   <td class=mspt style="font-weight: bold;">10,542.49</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>41</td>
+   <td class=msdate nowrap align=center>2023.03.21 12:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.73</td>
+   <td align=center>EURUSD</td>
+   <td>1.07791</td>
+   <td>1.07731</td>
+   <td>1.07911</td>
+   <td class=msdate nowrap align=center>2023.03.21 13:09:40</td>
+   <td>1.07731</td>
+   <td class="mspt profit_neg">-103.80</td>
+   <td class=mspt style="font-weight: bold;">10,438.69</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>42</td>
+   <td class=msdate nowrap align=center>2023.03.22 17:35:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.39</td>
+   <td align=center>EURUSD</td>
+   <td>1.07945</td>
+   <td>1.07871</td>
+   <td>1.08093</td>
+   <td class=msdate nowrap align=center>2023.03.22 18:00:40</td>
+   <td>1.08093</td>
+   <td class="mspt profit_pos">205.72</td>
+   <td class=mspt style="font-weight: bold;">10,644.41</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>43</td>
+   <td class=msdate nowrap align=center>2023.03.23 11:10:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">sell</td>
+   <td class=mspt>1.36</td>
+   <td align=center>EURUSD</td>
+   <td>1.08753</td>
+   <td>1.08830</td>
+   <td>1.08599</td>
+   <td class=msdate nowrap align=center>2023.03.23 12:16:40</td>
+   <td>1.08830</td>
+   <td class="mspt profit_neg">-104.72</td>
+   <td class=mspt style="font-weight: bold;">10,539.69</td>
+</tr>
+<tr bgcolor="#F5F5F5" align=right>
+   <td align=center>44</td>
+   <td class=msdate nowrap align=center>2023.03.27 14:25:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>0.91</td>
+   <td align=center>EURUSD</td>
+   <td>1.07869</td>
+   <td>1.07755</td>
+   <td>1.08097</td>
+   <td class=msdate nowrap align=center>2023.03.27 14:52:20</td>
+   <td>1.07755</td>
+   <td class="mspt profit_neg">-103.74</td>
+   <td class=mspt style="font-weight: bold;">10,435.95</td>
+</tr>
+<tr bgcolor="#FFFFFF" align=right>
+   <td align=center>45</td>
+   <td class=msdate nowrap align=center>2023.03.28 11:00:00</td>
+   <td align=center style="text-transform: uppercase; font-weight: bold;">buy</td>
+   <td class=mspt>1.10</td>
+   <td align=center>EURUSD</td>
+   <td>1.08228</td>
+   <td>1.08135</td>
+   <td>1.08414</td>
+   <td class=msdate nowrap align=center>2023.03.28 12:10:40</td>
+   <td>1.08414</td>
+   <td class="mspt profit_pos">204.60</td>
+   <td class=mspt style="font-weight: bold;">10,640.55</td>
+</tr>
+</table>
+<br>
+<div style="font: 8pt Tahoma; color: #888;">Generated by Antigravity Quantitative Suite | Grounded in MT5 Broker Engine Records</div>
+</div></body></html>

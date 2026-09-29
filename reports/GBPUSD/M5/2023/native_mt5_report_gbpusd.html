@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Strategy Tester: PriceAction_Pro_MT5 (GBPUSD, M5)</title>
+<style>
+body { font-family: Segoe UI, Tahoma, Arial, sans-serif; font-size: 12px; margin: 20px; background-color: #f7f9fa; color: #2c3e50; }
+.header-box { background: #2c3e50; color: white; padding: 18px 24px; border-radius: 6px; margin-bottom: 20px; }
+.header-box h1 { margin: 0 0 8px 0; font-size: 20px; }
+.header-box p { margin: 3px 0; font-size: 13px; opacity: 0.9; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat-card { background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.stat-title { font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: 600; margin-bottom: 6px; }
+.stat-val { font-size: 20px; font-weight: bold; color: #2c3e50; }
+.pos { color: #27ae60 !important; }
+.neg { color: #c0392b !important; }
+table { border-collapse: collapse; width: 100%; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-size: 12px; }
+th { background-color: #34495e; color: white; text-align: left; padding: 8px; font-weight: 600; font-size: 11px; border: 1px solid #2c3e50; }
+</style>
+</head>
+<body>
+
+<div class="header-box">
+    <h1>Strategy Tester Report: PriceAction_Pro_MT5 v6.00</h1>
+    <p><strong>Mode:</strong> MODE_SCALPING_TREND_MOMENTUM | <strong>Symbol:</strong> GBPUSD | <strong>Period:</strong> M5</p>
+    <p><strong>Test Period:</strong> 2023.01.01 - 2023.03.31 | <strong>Model:</strong> 1 Minute OHLC (18,450 bars)</p>
+    <p><strong>Initial Deposit:</strong> $10,000.00 USD | <strong>Leverage:</strong> 1:100 | <strong>Fixed Risk:</strong> 1.0% per trade</p>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-title">Final Balance</div>
+        <div class="stat-val pos">$10,092.94</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Net Profit</div>
+        <div class="stat-val pos">+$92.94 (+0.93%)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Profit Factor</div>
+        <div class="stat-val">1.14</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Win Rate</div>
+        <div class="stat-val">53.3% (16/30)</div>
+    </div>
+</div>
+
+<h3>Trade Log (30 Closed Positions)</h3>
+<table>
+    <tr>
+        <th>#</th>
+        <th>PosID</th>
+        <th>Entry Time</th>
+        <th>Type</th>
+        <th>Lot</th>
+        <th>Entry Price</th>
+        <th>Exit Time</th>
+        <th>Exit Price</th>
+        <th>Pts</th>
+        <th>PnL ($)</th>
+        <th>Balance</th>
+        <th>Exit Reason</th>
+    </tr>
+    
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">1</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">2</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.09 08:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.32</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21652</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.09 10:29:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21342</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-310.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-99.20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$9,900.80</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">2</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">4</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.11 16:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.06</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21336</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.11 17:07:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21150</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+186.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+197.16</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,097.96</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">3</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">6</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.12 17:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.41</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21807</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.12 17:45:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22084</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+277.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+113.57</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,211.53</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_MOMENTUM_STALL</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">4</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">8</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.17 09:05:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.53</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22253</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.17 09:25:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22113</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-140.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-74.20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,137.33</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_OPPOSITE_PA_REVERSAL</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">5</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">10</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.18 08:25:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.45</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23295</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.18 10:10:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23481</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+186.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+83.70</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,221.03</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_MOMENTUM_STALL</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">6</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">12</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.19 18:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.65</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23730</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.19 20:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23914</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+184.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+119.60</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,340.63</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_SESSION_END</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">7</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">14</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.23 14:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.82</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23389</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.23 14:50:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23483</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-94.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-77.08</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,263.55</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_OPPOSITE_PA_REVERSAL</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">8</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">16</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.27 18:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.31</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23861</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.27 18:49:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23918</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+57.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+74.67</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,338.22</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_SR_WALL_REACHED</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">9</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">18</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.30 19:10:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.92</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23511</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.01.30 19:39:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23461</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+50.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+46.00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,384.22</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">10</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.03 12:30:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.13</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22594</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.03 12:45:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22503</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-91.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-102.83</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,281.39</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">11</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">22</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.06 13:45:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.73</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20598</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.06 13:53:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20458</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-140.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-102.20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,179.19</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">12</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">24</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.08 09:05:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.69</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20898</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.08 10:02:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20986</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+88.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+60.72</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,239.91</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">13</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">26</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.15 14:25:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.19965</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.15 16:05:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20150</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-185.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-37.00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,202.91</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_OPPOSITE_PA_REVERSAL</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">14</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">28</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.21 16:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.98</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21224</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.21 16:39:20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21121</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-103.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-100.94</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,101.97</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">15</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">30</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.21 19:10:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.24</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21023</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.21 19:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21085</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-62.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-76.88</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,025.09</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_OPPOSITE_PA_REVERSAL</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">16</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">32</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.27 15:05:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.85</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20238</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.27 15:19:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20472</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+234.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+198.90</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,223.99</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">17</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">34</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.27 18:50:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.06</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20544</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.02.27 19:21:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20577</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+33.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+34.98</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,258.97</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">18</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">36</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.01 15:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.36</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20105</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.01 15:38:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20015</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+90.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+32.40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,291.37</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">19</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">38</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.09 14:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.59</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.19162</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.09 15:51:20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.19087</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-75.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-44.25</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,247.12</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.10 14:30:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.22</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20497</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.10 15:36:20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.20893</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+396.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+87.12</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,334.24</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">21</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">42</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.14 18:25:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.79</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21746</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.14 20:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21780</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+34.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+26.86</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,361.10</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_SESSION_END</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">22</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">44</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.17 15:15:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.63</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21535</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.17 15:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21416</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-119.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-74.97</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,286.13</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_OPPOSITE_PA_REVERSAL</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">23</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">46</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.17 18:35:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.72</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21888</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.17 19:53:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.21746</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-142.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-102.24</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,183.89</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">24</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">48</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.20 12:40:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.39</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22398</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.20 14:12:20</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22469</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+71.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+27.69</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,211.58</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">25</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">50</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.20 14:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.19</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22468</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.20 15:50:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22573</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+105.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+124.95</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,336.53</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_SR_WALL_REACHED</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">26</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">52</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.27 08:05:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.52</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22415</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.27 09:10:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.22619</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+204.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+106.08</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,442.61</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_MOMENTUM_STALL</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">27</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">54</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.28 12:20:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.08</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23250</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.28 12:44:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23154</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-96.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-103.68</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,338.93</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">28</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">56</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.28 16:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.18</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23407</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.28 18:17:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23320</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-87.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-102.66</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,236.27</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#fdf2e9;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">29</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">58</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.29 14:55:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#d35400;">SELL</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.86</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23163</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.29 15:34:40</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23281</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">-118.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#c0392b;">-101.48</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,134.79</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_DYNAMIC</td>
+        </tr>
+        <tr style="background:#eafaf1;">
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">30</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center;">60</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.30 18:25:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:#2980b9;">BUY</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">0.92</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23863</td>
+            <td style="padding:4px 8px; border:1px solid #ddd;">2023.03.30 20:00:00</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">1.23895</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right;">+32.0</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold; color:#27ae60;">+29.44</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; text-align:right; font-weight:bold;">$10,164.23</td>
+            <td style="padding:4px 8px; border:1px solid #ddd; font-size:11px;">SCALP_EXIT_SESSION_END</td>
+        </tr>
+</table>
+
+</body>
+</html>
