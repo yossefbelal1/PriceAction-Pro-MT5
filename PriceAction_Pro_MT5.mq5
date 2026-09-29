@@ -5,11 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "6.00"
+#property version   "7.00"
 #property description "Professional Price Action Trading System with Strict Mode Separation:"
 #property description "MODE A: BOOK_EXACT (Pure Price Action from 97-Page Course: Swings, S/R, Flips, 50% Confluence)"
 #property description "MODE B: ENHANCED (Optional Overlays: EMA, RSI, VSA, HTF Order Blocks/FVG)"
-#property description "MODE C: SCALPING_TREND_MOMENTUM v6.00 (Brooks/Volman/Mack 2nd Generation: Regimes, Compression, Scoring, Intelligent Exits)"
+#property description "MODE C: SCALPING_TREND_MOMENTUM v7.00 (Realized R First: 3-Layer Targets, Pre-Trade Feasibility, Pattern Engine, Forensics)"
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -56,7 +56,30 @@ enum ENUM_SCALP_EXIT_REASON
    SCALP_EXIT_MOMENTUM_STALL        = 6,
    SCALP_EXIT_SR_WALL_REACHED       = 7,
    SCALP_EXIT_SESSION_END           = 8,
-   SCALP_EXIT_TRAILING_STOP         = 9
+   SCALP_EXIT_TRAILING_STOP         = 9,
+   SCALP_EXIT_EARLY_TRUE_REVERSAL   = 10,
+   SCALP_EXIT_STRUCTURE_FAILURE     = 11,
+   SCALP_EXIT_EMERGENCY_EXIT        = 12
+};
+
+enum ENUM_CHART_PATTERN_TYPE
+{
+   PATTERN_NONE                 = 0,
+   PATTERN_ASCENDING_TRIANGLE   = 1,
+   PATTERN_DESCENDING_TRIANGLE  = 2,
+   PATTERN_SYMMETRICAL_TRIANGLE = 3,
+   PATTERN_BULL_PENNANT         = 4,
+   PATTERN_BEAR_PENNANT         = 5,
+   PATTERN_BULL_RECTANGLE       = 6,
+   PATTERN_BEAR_RECTANGLE       = 7,
+   PATTERN_FALLING_WEDGE        = 8,
+   PATTERN_RISING_WEDGE         = 9,
+   PATTERN_DOUBLE_BOTTOM        = 10,
+   PATTERN_DOUBLE_TOP           = 11,
+   PATTERN_HEAD_AND_SHOULDERS   = 12,
+   PATTERN_INVERSE_HS           = 13,
+   PATTERN_INSIDE_BAR_BREAK     = 14,
+   PATTERN_FAKEY_BREAK          = 15
 };
 
 enum ENUM_SCALP_TREND_REGIME
@@ -72,10 +95,11 @@ enum ENUM_SCALP_TREND_REGIME
 
 enum ENUM_SCALP_PULLBACK_TYPE
 {
-   PULLBACK_SHALLOW    = 0,  // Fast/shallow (<38.2% retrace, 1-2 bars)
-   PULLBACK_NORMAL     = 1,  // High probability (38.2%-65%, 2-7 bars, touches/approaches EMA20)
-   PULLBACK_DEEP       = 2,  // Deep retracement (>65% but holds invalidation level)
-   PULLBACK_EXHAUSTED  = 3   // Excessive bars (>8 bars) or structural degradation
+   PULLBACK_SHALLOW       = 0,  // Fast/shallow (<35% retrace, 1-2 bars)
+   PULLBACK_NORMAL        = 1,  // High probability (35%-68%, 2-7 bars, touches/approaches EMA20)
+   PULLBACK_DEEP          = 2,  // Deep retracement (>68% but holds invalidation level)
+   PULLBACK_EXHAUSTED     = 3,  // Excessive bars (>8 bars) or structural degradation
+   PULLBACK_REVERSAL_RISK = 4   // Violent opposing candle (>1.2 ATR) breaking micro swing
 };
 
 enum ENUM_SCALP_COUNTERTREND_SEVERITY
@@ -166,6 +190,35 @@ struct SSRZone
    string   objName;
 };
 
+struct SChartPattern
+{
+   ENUM_CHART_PATTERN_TYPE type;
+   double   boundaryTop;
+   double   boundaryBottom;
+   double   neckline;
+   double   patternHeight;
+   double   measuredMove;
+   datetime startTime;
+   datetime breakoutTime;
+   bool     isBreakout;
+   bool     isRetested;
+   bool     isBullish;
+   double   qualityScore;
+};
+
+struct STargetPlan
+{
+   double target1_Structural;
+   double target1R;
+   double target2_Pattern;
+   double target2R;
+   double target3_Momentum;
+   double target3R;
+   double potentialRewardR;
+   bool   isAcceptable;
+   string nearestObstacleDesc;
+};
+
 struct SPositionTracker
 {
    ulong    ticket;
@@ -177,6 +230,12 @@ struct SPositionTracker
    ENUM_POSITION_TYPE type;
    string   setupName;
    bool     breakEvenApplied;
+   double   maxFavorablePrice;  // Peak favorable price (MFE)
+   double   maxAdversePrice;    // Peak adverse price (MAE)
+   double   plannedTarget1R;    // Structural target in R
+   double   plannedTarget2R;    // Pattern target in R
+   double   plannedTarget3R;    // Momentum runner target in R
+   double   potentialRewardR;   // Pre-trade potential reward in R
 };
 
 struct SOCOPendingPair
@@ -351,13 +410,16 @@ input int             InpScalpEmaPeriod        = 20;         // Fast EMA Context
 input int             InpScalpSlowEmaPeriod    = 50;         // Slow EMA Baseline Period (M5 Trend Baseline)
 input bool            InpScalpUseMacroH1       = false;      // Optional H1 Macro Trend Filter
 
-input group "=== 13. Scalping Pullback & H2/L2 / Second Break ==="
+input group "=== 13. Scalping Pullback, H2/L2 & Pattern Geometry ==="
 input int             InpScalpMaxPullbackBars  = 8;          // Max Allowed Bars in Pullback Before Invalidation
 input int             InpScalpMinPullbackBars  = 2;          // Min Required Bars in Pullback (Orderly Correction)
 input double          InpScalpBreakBufferPoints= 10.0;       // Second Break Trigger Buffer Beyond High/Low (Points)
 input bool            InpScalpRequireSignalBar = true;       // Require Favorable Signal Bar Close (Top/Bottom 33%)
 input bool            InpScalpUseSRProximityFilter = true;   // Filter Entries Too Close to Opposing Major S/R
 input double          InpScalpMinRDistanceToSR = 1.0;        // Min Distance in R Multiples to Nearest Opposing S/R
+input double          InpScalpMinPlannedRR     = 1.50;       // Min Planned R:R to Nearest Obstacle (Pre-Trade Gate)
+input bool            InpScalpUsePatternEngine = true;       // Enable Classical 15-Chart-Pattern Context Engine
+input double          InpScalpMinStaircaseScore= 50.0;       // Min Progressive Trend Staircase Score (0 - 100)
 input bool            InpScalpUsePressureEngine= true;       // Enable Pressure & Volatility Compression Scoring
 input double          InpScalpMinPressureScore = 0.40;       // Minimum Pressure Score (0.0 - 1.0)
 input ENUM_SCALP_SETUP_GRADE InpScalpMinSetupGrade = GRADE_B;// Minimum Setup Quality Grade Required
@@ -368,19 +430,22 @@ input int             InpScalpVolumeMAPeriod   = 20;         // Volume Moving Av
 input double          InpScalpMinRelativeVolume= 1.0;        // Min Trigger Bar Volume Relative to Volume MA
 input double          InpScalpPullbackVolRatio = 0.9;        // Max Pullback Avg Volume Relative to Impulse Avg Volume
 
-input group "=== 15. Scalping Dynamic Exits & Position Management ==="
+input group "=== 15. Scalping Dynamic Exits & Position Management (V7 Realized R First) ==="
 input ENUM_SCALP_EXIT_INTELLIGENCE_MODE InpScalpExitEngineMode = SCALP_EXIT_MODE_INTELLIGENT; // Exit Engine Mode (Intelligent vs Classic v5)
 input bool            InpScalpDynamicExits     = true;       // Enable Dynamic Price Action Exits
+input bool            InpScalpProhibitProfitExitBelow1R = true; // Hard Rule: Prohibit Discretionary Profit Exits Below +1.0R
+input double          InpScalpDelayedBE_R      = 1.25;       // Delayed Break-Even Activation Level in R (Avoid Scratches)
+input bool            InpScalpRunnerMode       = true;       // Allow Runners Past Target 1 to Reach Target 2/3 (>= 2.5R - 4.0R)
 input bool            InpScalpExitOnOppositeBar= true;       // Exit on Strong Opposite Reversal Candle
 input int             InpScalpMinHoldBars      = 2;          // Min Hold Bars Before Dynamic PA Reversal Exit
 input bool            InpScalpExitOnStructureBreak = true;   // Exit on Micro-Structure Invalidation
 input bool            InpScalpExitOnMomentumStall = true;    // Exit on Momentum Stall (N bars no progress)
 input int             InpScalpStallBars        = 4;          // Consecutive Bars Without New Extreme in Profit
-input double          InpScalpStallMinR        = 0.8;        // Min Accrued Profit R Before Momentum Stall Evaluates
-input double          InpScalpFixedRRFallback  = 2.0;        // Fallback Take Profit Target (R Multiples, 0=None)
-input double          InpScalpRunnerTargetR    = 3.0;        // Multi-R Runner Target (0 = None / Trailing Only)
+input double          InpScalpStallMinR        = 1.0;        // Min Accrued Profit R Before Momentum Stall Evaluates
+input double          InpScalpFixedRRFallback  = 2.5;        // Fallback Take Profit Target (R Multiples, 0=None)
+input double          InpScalpRunnerTargetR    = 3.5;        // Multi-R Runner Target (0 = None / Trailing Only)
 input bool            InpScalpUseTrailing      = true;       // Trailing Stop Behind Prior Bar Extremes
-input double          InpScalpTrailingStartR   = 1.0;        // Start Trailing Stop after Gaining +R
+input double          InpScalpTrailingStartR   = 1.25;       // Start Trailing Stop after Gaining +R
 input bool            InpScalpTrailBehindTwoBars= true;      // Trail Behind Lowest Low of 2 Bars (Avoid Whipsaw)
 
 input group "=== 16. Scalping Session & Risk Protections ==="
@@ -443,9 +508,12 @@ void              Scalp_UpdateStateMachine(const MqlRates &rates[], int copied, 
 bool              Scalp_CheckSignalConfirmation(const MqlRates &bar, bool isBuy);
 bool              Scalp_CheckSRProximity(double entryPrice, double slPrice, bool isBuy);
 bool              Scalp_CheckVolumeConfirmation(const MqlRates &rates[], int triggerShift, int pullbackStartShift, int pullbackEndShift);
-bool              Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag);
+bool              Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag, const STargetPlan &targetPlan);
 void              Scalp_ClosePosition(ulong ticket, ENUM_SCALP_EXIT_REASON reason, string detail);
 bool              Scalp_IsSessionAllowed();
+SChartPattern     Scalp_DetectChartPattern(const MqlRates &rates[], int copied, double atr, bool isBuy);
+STargetPlan       Scalp_EvaluateTargetPlan(double entryPrice, double slPrice, bool isBuy, double atr, const SChartPattern &pattern);
+double            Scalp_CalculateStaircaseScore(const MqlRates &rates[], int copied, bool isBuy, double atr);
 
 void              UpdateSwingsAndStructure();
 void              UpdateSRZones();
@@ -466,7 +534,7 @@ bool              ExecuteFakeyOrder(const MqlRates &bar, double falseBreakExtrem
 bool              ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideCount, ENUM_MARKET_TREND trend);
 void              ManageActivePositions();
 void              ManageOCOPendingPairs();
-void              RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup);
+void              RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup, double t1R = 0.0, double t2R = 0.0, double t3R = 0.0, double potRewardR = 0.0);
 int               FindTrackedPositionIndex(ulong ticket);
 bool              IsSignalProcessed(datetime barTime, string key);
 void              RecordSignalProcessed(datetime barTime, string key);
@@ -2075,7 +2143,8 @@ void ManageOCOPendingPairs()
 //+------------------------------------------------------------------+
 //| TRACKED POSITIONS DATA STRUCTURE UTILITIES                       |
 //+------------------------------------------------------------------+
-void RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup)
+void RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, double tpPrice, ENUM_POSITION_TYPE type, string setup,
+                           double t1R = 0.0, double t2R = 0.0, double t3R = 0.0, double potRewardR = 0.0)
 {
    // Prevent duplicate tracker entries
    if(FindTrackedPositionIndex(ticket) >= 0) return;
@@ -2092,6 +2161,12 @@ void RegisterPositionTrack(ulong ticket, double openPrice, double slPrice, doubl
    m_trackedPositions[sz].type              = type;
    m_trackedPositions[sz].setupName         = setup;
    m_trackedPositions[sz].breakEvenApplied  = false;
+   m_trackedPositions[sz].maxFavorablePrice = openPrice;
+   m_trackedPositions[sz].maxAdversePrice   = openPrice;
+   m_trackedPositions[sz].plannedTarget1R   = t1R;
+   m_trackedPositions[sz].plannedTarget2R   = t2R;
+   m_trackedPositions[sz].plannedTarget3R   = t3R;
+   m_trackedPositions[sz].potentialRewardR  = potRewardR;
 
    // Persist to Terminal Global Variable
    string gvName = StringFormat("PA_INIT_SL_%I64u", ticket);
@@ -2840,85 +2915,369 @@ double Scalp_CalculatePressureScore(const MqlRates &rates[], int copied, double 
 }
 
 //+------------------------------------------------------------------+
-//| SUB-ENGINE 4: S/R ROOM CALCULATOR                                |
+//| SUB-ENGINE 4A: CLASSICAL CHART PATTERN ENGINE (15 PATTERNS)      |
+//| Detects Triangles, Pennants, Rectangles, Wedges, Tops & Bottoms  |
 //+------------------------------------------------------------------+
-double Scalp_GetSRRoomR(double entryPrice, double slPrice, bool isBuy)
+SChartPattern Scalp_DetectChartPattern(const MqlRates &rates[], int copied, double atr, bool isBuy)
 {
+   SChartPattern p;
+   ZeroMemory(p);
+   p.type = PATTERN_NONE;
+   if(!InpScalpUsePatternEngine || copied < 15 || atr <= 0.0) return p;
+
+   double highestH = -1.0, lowestL = 999999.0;
+   int highestIdx = 1, lowestIdx = 1;
+   for(int i = 1; i <= 10; i++)
+   {
+      if(rates[i].high > highestH) { highestH = rates[i].high; highestIdx = i; }
+      if(rates[i].low < lowestL)   { lowestL = rates[i].low; lowestIdx = i; }
+   }
+   double range = highestH - lowestL;
+   if(range <= 0.0) return p;
+
+   // 1. Ascending Triangle (Bullish): Flat resistance, rising swing lows
+   bool flatResistance = (MathAbs(rates[1].high - highestH) <= 0.30 * atr && MathAbs(rates[3].high - highestH) <= 0.35 * atr);
+   bool risingLows     = (rates[1].low > rates[4].low && rates[4].low > lowestL);
+   if(isBuy && flatResistance && risingLows && range >= 0.70 * atr)
+   {
+      p.type          = PATTERN_ASCENDING_TRIANGLE;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.patternHeight = range;
+      p.measuredMove  = range;
+      p.isBullish     = true;
+      p.qualityScore  = 85.0;
+      return p;
+   }
+
+   // 2. Descending Triangle (Bearish): Flat support, falling swing highs
+   bool flatSupport   = (MathAbs(rates[1].low - lowestL) <= 0.30 * atr && MathAbs(rates[3].low - lowestL) <= 0.35 * atr);
+   bool fallingHighs  = (rates[1].high < rates[4].high && rates[4].high < highestH);
+   if(!isBuy && flatSupport && fallingHighs && range >= 0.70 * atr)
+   {
+      p.type          = PATTERN_DESCENDING_TRIANGLE;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.patternHeight = range;
+      p.measuredMove  = range;
+      p.isBullish     = false;
+      p.qualityScore  = 85.0;
+      return p;
+   }
+
+   // 3. Pennant / Flag (High Priority Continuation)
+   double poleHeight = MathAbs(rates[5].high - rates[10].low);
+   double flagRange = 0.0;
+   for(int f = 1; f <= 4; f++) flagRange = MathMax(flagRange, rates[f].high - rates[f].low);
+   if(isBuy && poleHeight >= 1.4 * atr && flagRange <= 0.70 * atr)
+   {
+      p.type          = PATTERN_BULL_PENNANT;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.patternHeight = flagRange;
+      p.measuredMove  = poleHeight;
+      p.isBullish     = true;
+      p.qualityScore  = 90.0;
+      return p;
+   }
+   if(!isBuy && poleHeight >= 1.4 * atr && flagRange <= 0.70 * atr)
+   {
+      p.type          = PATTERN_BEAR_PENNANT;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.patternHeight = flagRange;
+      p.measuredMove  = poleHeight;
+      p.isBullish     = false;
+      p.qualityScore  = 90.0;
+      return p;
+   }
+
+   // 4. Rectangle Consolidation
+   int topTouches = 0, botTouches = 0;
+   for(int k = 1; k <= 8; k++)
+   {
+      if((highestH - rates[k].high) <= 0.25 * atr) topTouches++;
+      if((rates[k].low - lowestL) <= 0.25 * atr)   botTouches++;
+   }
+   if(topTouches >= 2 && botTouches >= 2 && range <= 1.8 * atr)
+   {
+      p.type          = isBuy ? PATTERN_BULL_RECTANGLE : PATTERN_BEAR_RECTANGLE;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.patternHeight = range;
+      p.measuredMove  = range;
+      p.isBullish     = isBuy;
+      p.qualityScore  = 75.0;
+      return p;
+   }
+
+   // 5. Wedge (Falling in Uptrend / Rising in Downtrend)
+   if(isBuy && rates[1].high < rates[5].high && rates[1].low < rates[5].low && (highestH - lowestL) >= 0.8 * atr)
+   {
+      double slopeH = (rates[5].high - rates[1].high);
+      double slopeL = (rates[5].low - rates[1].low);
+      if(slopeH > 0.0 && slopeL > 0.0 && slopeH > slopeL)
+      {
+         p.type          = PATTERN_FALLING_WEDGE;
+         p.boundaryTop   = highestH;
+         p.boundaryBottom= lowestL;
+         p.patternHeight = range;
+         p.measuredMove  = range * 1.2;
+         p.isBullish     = true;
+         p.qualityScore  = 80.0;
+         return p;
+      }
+   }
+   else if(!isBuy && rates[1].high > rates[5].high && rates[1].low > rates[5].low && (highestH - lowestL) >= 0.8 * atr)
+   {
+      double slopeH = (rates[1].high - rates[5].high);
+      double slopeL = (rates[1].low - rates[5].low);
+      if(slopeH > 0.0 && slopeL > 0.0 && slopeL > slopeH)
+      {
+         p.type          = PATTERN_RISING_WEDGE;
+         p.boundaryTop   = highestH;
+         p.boundaryBottom= lowestL;
+         p.patternHeight = range;
+         p.measuredMove  = range * 1.2;
+         p.isBullish     = false;
+         p.qualityScore  = 80.0;
+         return p;
+      }
+   }
+
+   // 6. Double Bottom / Double Top
+   if(isBuy && MathAbs(rates[lowestIdx].low - lowestL) <= 0.15 * atr && lowestIdx >= 4)
+   {
+      p.type          = PATTERN_DOUBLE_BOTTOM;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.neckline      = highestH;
+      p.patternHeight = range;
+      p.measuredMove  = range;
+      p.isBullish     = true;
+      p.qualityScore  = 80.0;
+      return p;
+   }
+   if(!isBuy && MathAbs(rates[highestIdx].high - highestH) <= 0.15 * atr && highestIdx >= 4)
+   {
+      p.type          = PATTERN_DOUBLE_TOP;
+      p.boundaryTop   = highestH;
+      p.boundaryBottom= lowestL;
+      p.neckline      = lowestL;
+      p.patternHeight = range;
+      p.measuredMove  = range;
+      p.isBullish     = false;
+      p.qualityScore  = 80.0;
+      return p;
+   }
+
+   return p;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 4B: THREE-LAYER TARGET ENGINE (REALIZED R FIRST)      |
+//| Computes T1 (Structural), T2 (Pattern), T3 (Momentum Runner),    |
+//| and enforces Hard Pre-Trade Feasibility: PotentialRewardR >= 1.5R|
+//+------------------------------------------------------------------+
+STargetPlan Scalp_EvaluateTargetPlan(double entryPrice, double slPrice, bool isBuy, double atr, const SChartPattern &pattern)
+{
+   STargetPlan plan;
+   ZeroMemory(plan);
+
    double rDist = MathAbs(entryPrice - slPrice);
-   if(rDist <= 0.0) return 5.0;
+   if(rDist <= 0.0) return plan;
 
+   // 1. Structural Target (T1): Nearest opposing Major Resistance / Support Zone
+   double nearestObstacle = isBuy ? 999999.0 : 0.0;
+   string obstacleDesc = "Open Space";
+
+   // Check S/R Zones
    int totalZones = ArraySize(m_srZones);
-   double nearestOpposingDist = 999999.0;
-
    for(int i = 0; i < totalZones; i++)
    {
       if(isBuy)
       {
-         if(m_srZones[i].priceBottom > entryPrice)
+         if(m_srZones[i].priceBottom > entryPrice && m_srZones[i].priceBottom < nearestObstacle)
          {
-            double d = m_srZones[i].priceBottom - entryPrice;
-            if(d < nearestOpposingDist) nearestOpposingDist = d;
+            nearestObstacle = m_srZones[i].priceBottom;
+            obstacleDesc = StringFormat("SR_Resist_%.5f", nearestObstacle);
          }
       }
       else
       {
-         if(m_srZones[i].priceTop < entryPrice)
+         if(m_srZones[i].priceTop < entryPrice && m_srZones[i].priceTop > nearestObstacle)
          {
-            double d = entryPrice - m_srZones[i].priceTop;
-            if(d < nearestOpposingDist) nearestOpposingDist = d;
+            nearestObstacle = m_srZones[i].priceTop;
+            obstacleDesc = StringFormat("SR_Support_%.5f", nearestObstacle);
          }
       }
    }
 
-   return (nearestOpposingDist < 999900.0) ? (nearestOpposingDist / rDist) : 5.0;
+   // If no opposing S/R Zone found, open space fallback to Fixed RR Fallback
+   if(isBuy && nearestObstacle >= 999900.0)  nearestObstacle = entryPrice + (rDist * InpScalpFixedRRFallback);
+   if(!isBuy && nearestObstacle <= 0.0)      nearestObstacle = entryPrice - (rDist * InpScalpFixedRRFallback);
+
+   plan.target1_Structural = nearestObstacle;
+   plan.target1R = MathAbs(nearestObstacle - entryPrice) / rDist;
+   plan.nearestObstacleDesc = obstacleDesc;
+
+   // 2. Pattern Target (T2): Measured move from classical chart pattern
+   if(pattern.type != PATTERN_NONE && pattern.measuredMove > 0.0)
+   {
+      plan.target2_Pattern = isBuy ? (entryPrice + pattern.measuredMove) : (entryPrice - pattern.measuredMove);
+      plan.target2R = pattern.measuredMove / rDist;
+   }
+   else
+   {
+      plan.target2_Pattern = isBuy ? (entryPrice + rDist * InpScalpFixedRRFallback) : (entryPrice - rDist * InpScalpFixedRRFallback);
+      plan.target2R = InpScalpFixedRRFallback;
+   }
+
+   // 3. Momentum Runner Target (T3)
+   double maxPlannedR = MathMax(plan.target1R, plan.target2R);
+   plan.target3R = MathMax(maxPlannedR * 1.4, InpScalpRunnerTargetR);
+   plan.target3_Momentum = isBuy ? (entryPrice + rDist * plan.target3R) : (entryPrice - rDist * plan.target3R);
+
+   // PotentialRewardR is the conservative space to the first meaningful obstacle
+   plan.potentialRewardR = plan.target1R;
+
+   // HARD RULE PRE-TRADE FEASIBILITY GATE: Must have at least InpScalpMinPlannedRR to the first obstacle!
+   plan.isAcceptable = (plan.potentialRewardR >= InpScalpMinPlannedRR);
+
+   return plan;
+}
+
+//+------------------------------------------------------------------+
+//| SUB-ENGINE 4C: STAIRCASE STRUCTURE QUALITY (AL BROOKS / PATS)    |
+//| Evaluates progressive HH/HL (Bull) or LH/LL (Bear) cleanliness   |
+//+------------------------------------------------------------------+
+double Scalp_CalculateStaircaseScore(const MqlRates &rates[], int copied, bool isBuy, double atr)
+{
+   if(copied < 12 || atr <= 0.0) return 60.0;
+
+   double score = 40.0; // Neutral starting base
+
+   // 1. Major Structural Higher Low / Lower High
+   if(isBuy)
+   {
+      if(m_scalpState.invalidationLevel > 0.0 && m_scalpState.pullbackExtreme > m_scalpState.invalidationLevel)
+      {
+         score += 25.0; // Higher Low confirmed above invalidation
+         double impulseDist = MathAbs(m_scalpState.impulseExtreme - m_scalpState.invalidationLevel);
+         double pbDist      = MathAbs(m_scalpState.impulseExtreme - m_scalpState.pullbackExtreme);
+         if(impulseDist > 0.0 && (pbDist / impulseDist) <= 0.618)
+            score += 15.0; // Orderly, healthy retracement (not deep collapse)
+      }
+      else if(m_scalpState.invalidationLevel > 0.0)
+      {
+         score -= 20.0; // Violated or overlapping invalidation level!
+      }
+
+      // 2. Progressive Closes across recent bars (last 6 bars)
+      int bullBars = 0, bearBars = 0;
+      for(int i = 1; i <= 6; i++)
+      {
+         if(rates[i].close > rates[i].open) bullBars++;
+         else bearBars++;
+      }
+      if(bullBars >= bearBars) score += 10.0;
+
+      // 3. Trigger Bar Closes Strongly in Trend Direction (Al Brooks Signal Bar)
+      double bRange = rates[1].high - rates[1].low;
+      if(bRange > 0.0 && (rates[1].close - rates[1].low) / bRange >= 0.50)
+         score += 10.0;
+   }
+   else // Sell
+   {
+      if(m_scalpState.invalidationLevel > 0.0 && m_scalpState.pullbackExtreme < m_scalpState.invalidationLevel)
+      {
+         score += 25.0; // Lower High confirmed below invalidation
+         double impulseDist = MathAbs(m_scalpState.impulseExtreme - m_scalpState.invalidationLevel);
+         double pbDist      = MathAbs(m_scalpState.impulseExtreme - m_scalpState.pullbackExtreme);
+         if(impulseDist > 0.0 && (pbDist / impulseDist) <= 0.618)
+            score += 15.0; // Orderly, healthy retracement
+      }
+      else if(m_scalpState.invalidationLevel > 0.0)
+      {
+         score -= 20.0; // Violated or overlapping invalidation level!
+      }
+
+      // 2. Progressive Closes across recent bars
+      int bullBars = 0, bearBars = 0;
+      for(int i = 1; i <= 6; i++)
+      {
+         if(rates[i].close < rates[i].open) bearBars++;
+         else bullBars++;
+      }
+      if(bearBars >= bullBars) score += 10.0;
+
+      // 3. Trigger Bar Closes Strongly in Trend Direction
+      double bRange = rates[1].high - rates[1].low;
+      if(bRange > 0.0 && (rates[1].high - rates[1].close) / bRange >= 0.50)
+         score += 10.0;
+   }
+
+   return MathMin(MathMax(score, 0.0), 100.0);
+}
+
+// Backward compatibility helper
+double Scalp_GetSRRoomR(double entryPrice, double slPrice, bool isBuy)
+{
+   SChartPattern dummyPattern;
+   ZeroMemory(dummyPattern);
+   STargetPlan plan = Scalp_EvaluateTargetPlan(entryPrice, slPrice, isBuy, 10.0 * m_point, dummyPattern);
+   return plan.potentialRewardR;
 }
 
 //+------------------------------------------------------------------+
 //| SUB-ENGINE 5: SETUP QUALITY SCORING (A+ / A / B / C / REJECT)    |
+//| V7: Integrates Staircase Quality, Pattern Confluence & Target RR |
 //+------------------------------------------------------------------+
 double Scalp_CalculateSetupScore(ENUM_SCALP_TREND_REGIME m5Regime, ENUM_SCALP_TREND_REGIME m15Regime,
                                 ENUM_SCALP_PULLBACK_TYPE pbType, double pressureScore,
                                 const MqlRates &signalBar, bool isBuy, double atr,
-                                double srRoomR, ENUM_SCALP_SETUP_GRADE &outGrade)
+                                double srRoomR, double staircaseScore, const SChartPattern &pattern,
+                                ENUM_SCALP_SETUP_GRADE &outGrade)
 {
    double score = 0.0;
 
-   // Component A: Trend Regime Quality (30 pts max)
+   // Component A: Trend Regime Quality (25 pts max)
    int dirSign = isBuy ? 1 : -1;
    int m5ScoreVal = (int)m5Regime * dirSign;
-   if(m5ScoreVal >= 3)       score += 30.0; // Strong Bull/Bear
-   else if(m5ScoreVal >= 2)  score += 24.0; // Bull/Bear
-   else if(m5ScoreVal >= 1)  score += 15.0; // Weak
+   if(m5ScoreVal >= 3)       score += 25.0; // Strong Bull/Bear
+   else if(m5ScoreVal >= 2)  score += 20.0; // Bull/Bear
+   else if(m5ScoreVal >= 1)  score += 12.0; // Weak
    else                      score += 0.0;  // Range or Counter
 
    // M15 Alignment Bonus (5 pts)
    int m15ScoreVal = (int)m15Regime * dirSign;
    if(m15ScoreVal > 0)       score += 5.0;
 
-   // Component B: Pullback Quality (25 pts max)
-   if(pbType == PULLBACK_NORMAL)       score += 25.0;
-   else if(pbType == PULLBACK_SHALLOW) score += 18.0;
-   else if(pbType == PULLBACK_DEEP)    score += 10.0;
-   else                                score += 0.0;
+   // Component B: Pullback Quality (20 pts max)
+   if(pbType == PULLBACK_NORMAL)          score += 20.0;
+   else if(pbType == PULLBACK_SHALLOW)    score += 14.0;
+   else if(pbType == PULLBACK_DEEP)       score += 8.0;
+   else                                   score += 0.0;
 
-   // Component C: Pressure Score (20 pts max)
-   score += (pressureScore * 20.0);
+   // Component C: Pressure Score (15 pts max)
+   score += (pressureScore * 15.0);
 
-   // Component D: Signal Bar Conviction (10 pts max)
-   double sRng = signalBar.high - signalBar.low;
-   if(sRng > 0.0)
+   // Component D: Staircase Structure Quality (15 pts max)
+   if(staircaseScore >= 75.0)      score += 15.0;
+   else if(staircaseScore >= 60.0) score += 10.0;
+   else if(staircaseScore >= 45.0) score += 5.0;
+
+   // Component E: Chart Pattern Confluence (10 pts max)
+   if(pattern.type != PATTERN_NONE)
    {
-      double closeRatio = isBuy ? (signalBar.close - signalBar.low) / sRng : (signalBar.high - signalBar.close) / sRng;
-      if(closeRatio >= 0.70) score += 7.0;
-      else if(closeRatio >= 0.55) score += 4.0;
-
-      if(atr > 0.0 && (sRng / atr) >= 0.75) score += 3.0;
+      if(pattern.isBullish == isBuy) score += 10.0; // Pattern aligned with trade!
    }
 
-   // Component E: S/R Room (10 pts max)
-   if(srRoomR >= 2.0)      score += 10.0;
-   else if(srRoomR >= 1.5) score += 7.0;
-   else if(srRoomR >= 1.0) score += 4.0;
+   // Component F: Target Room R (10 pts max)
+   if(srRoomR >= 2.5)      score += 10.0;
+   else if(srRoomR >= 2.0) score += 8.0;
+   else if(srRoomR >= 1.5) score += 5.0;
+   else if(srRoomR >= 1.0) score += 2.0;
 
    score = MathMin(MathMax(score, 0.0), 100.0);
 
@@ -2994,7 +3353,7 @@ ENUM_SCALP_COUNTERTREND_SEVERITY Scalp_ClassifyCounterTrendMove(const MqlRates &
 //+------------------------------------------------------------------+
 //| SCALPING ENGINE: POSITION EXECUTION                              |
 //+------------------------------------------------------------------+
-bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag)
+bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string setupTag, const STargetPlan &targetPlan)
 {
    double entryPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
 
@@ -3011,7 +3370,15 @@ bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string 
    if(!CalculateStrictLotSize(entryPrice, slPrice, lot)) return false;
 
    double tpPrice = 0.0;
-   if(InpScalpFixedRRFallback > 0.0)
+   if(InpScalpRunnerMode && targetPlan.target3_Momentum > 0.0)
+   {
+      tpPrice = targetPlan.target3_Momentum;
+   }
+   else if(targetPlan.target2_Pattern > 0.0)
+   {
+      tpPrice = targetPlan.target2_Pattern;
+   }
+   else if(InpScalpFixedRRFallback > 0.0)
    {
       double rDist = MathAbs(entryPrice - slPrice);
       tpPrice = isBuy ? (entryPrice + rDist * InpScalpFixedRRFallback) : (entryPrice - rDist * InpScalpFixedRRFallback);
@@ -3051,10 +3418,12 @@ bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string 
       return false;
    }
 
-   PrintFormat("[SCALP EXEC OK] %s pos=#%I64u deal=#%I64u lot=%.2f sl=%.5f tp=%.5f retcode=%u",
-               comment, posTicket, dealTicket, lot, slPrice, tpPrice, retcode);
+   PrintFormat("[SCALP EXEC OK] %s %s pos=#%I64u deal=#%I64u lot=%.2f sl=%.5f tp=%.5f [Plan: T1=%.2fR T2=%.2fR T3=%.2fR Pot=%.2fR] retcode=%u",
+               comment, setupTag, posTicket, dealTicket, lot, slPrice, tpPrice,
+               targetPlan.target1R, targetPlan.target2R, targetPlan.target3R, targetPlan.potentialRewardR, retcode);
 
-   RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, (isBuy ? POSITION_TYPE_BUY : POSITION_TYPE_SELL), setupTag);
+   RegisterPositionTrack(posTicket, entryPrice, slPrice, tpPrice, (isBuy ? POSITION_TYPE_BUY : POSITION_TYPE_SELL), setupTag,
+                         targetPlan.target1R, targetPlan.target2R, targetPlan.target3R, targetPlan.potentialRewardR);
    m_scalpTradesToday++;
    m_scalpBarsInTrade = 0;
 
@@ -3065,17 +3434,50 @@ bool Scalp_ExecuteOrder(bool isBuy, double triggerPrice, double slPrice, string 
 }
 
 //+------------------------------------------------------------------+
-//| SCALPING ENGINE: POSITION CLOSE HELPER                           |
+//| SCALPING ENGINE: POSITION CLOSE HELPER (MFE/MAE FORENSICS)       |
 //+------------------------------------------------------------------+
 void Scalp_ClosePosition(ulong ticket, ENUM_SCALP_EXIT_REASON reason, string detail)
 {
+   int trackIdx = FindTrackedPositionIndex(ticket);
+   double openPrice = 0.0, initialSL = 0.0, initialRiskPts = 0.0;
+   double maxFav = 0.0, maxAdv = 0.0;
+   ENUM_POSITION_TYPE posType = POSITION_TYPE_BUY;
+   string setupName = "";
+
+   if(trackIdx >= 0)
+   {
+      openPrice      = m_trackedPositions[trackIdx].openPrice;
+      initialSL      = m_trackedPositions[trackIdx].initialSL;
+      initialRiskPts = m_trackedPositions[trackIdx].initialRiskPoints;
+      maxFav         = m_trackedPositions[trackIdx].maxFavorablePrice;
+      maxAdv         = m_trackedPositions[trackIdx].maxAdversePrice;
+      posType        = m_trackedPositions[trackIdx].type;
+      setupName      = m_trackedPositions[trackIdx].setupName;
+   }
+
    if(m_trade.PositionClose(ticket))
    {
       uint retcode = m_trade.ResultRetcode();
       if(retcode == TRADE_RETCODE_DONE)
       {
-         PrintFormat("[SCALP EXIT OK] Position #%I64u closed. Reason: %s (%s) retcode=%u",
-                     ticket, EnumToString(reason), detail, retcode);
+         ulong dealTicket = m_trade.ResultDeal();
+         double closePrice = (posType == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+         if(dealTicket > 0 && HistoryDealSelect(dealTicket))
+         {
+            closePrice = HistoryDealGetDouble(dealTicket, DEAL_PRICE);
+         }
+
+         double profitPts = (posType == POSITION_TYPE_BUY) ? (closePrice - openPrice) / m_point : (openPrice - closePrice) / m_point;
+         double realizedR = (initialRiskPts > 0.0) ? (profitPts / initialRiskPts) : 0.0;
+         double mfePts    = (posType == POSITION_TYPE_BUY) ? (maxFav - openPrice) / m_point : (openPrice - maxFav) / m_point;
+         double mfeR      = (initialRiskPts > 0.0) ? (mfePts / initialRiskPts) : 0.0;
+         double maePts    = (posType == POSITION_TYPE_BUY) ? (openPrice - maxAdv) / m_point : (maxAdv - openPrice) / m_point;
+         double maeR      = (initialRiskPts > 0.0) ? (maePts / initialRiskPts) : 0.0;
+         double captureRatio = (mfeR > 0.0) ? ((realizedR / mfeR) * 100.0) : 0.0;
+
+         PrintFormat("[SCALP FORENSICS] Pos #%I64u [%s] Closed. Reason: %s (%s) RealizedR=%.2f MFE=%.2fR MAE=%.2fR MFE_Capture=%.1f%% retcode=%u",
+                     ticket, setupName, EnumToString(reason), detail, realizedR, mfeR, maeR, captureRatio, retcode);
+
          m_scalpLastExitTime = TimeCurrent();
          m_scalpBarsInTrade  = 0;
          m_scalpState.state  = SCALP_STATE_IDLE;
@@ -3116,6 +3518,25 @@ void Scalp_ManageActivePositions()
 
       if(initialRiskPts <= 0.0) continue;
 
+      // 0. Update Real-Time MFE and MAE
+      if(trackIdx >= 0)
+      {
+         if(type == POSITION_TYPE_BUY)
+         {
+            if(currentPrice > m_trackedPositions[trackIdx].maxFavorablePrice)
+               m_trackedPositions[trackIdx].maxFavorablePrice = currentPrice;
+            if(currentPrice < m_trackedPositions[trackIdx].maxAdversePrice)
+               m_trackedPositions[trackIdx].maxAdversePrice = currentPrice;
+         }
+         else // SELL
+         {
+            if(currentPrice < m_trackedPositions[trackIdx].maxFavorablePrice)
+               m_trackedPositions[trackIdx].maxFavorablePrice = currentPrice;
+            if(currentPrice > m_trackedPositions[trackIdx].maxAdversePrice)
+               m_trackedPositions[trackIdx].maxAdversePrice = currentPrice;
+         }
+      }
+
       double profitPts = (type == POSITION_TYPE_BUY) ? (currentPrice - openPrice) / m_point : (openPrice - currentPrice) / m_point;
       double currentR  = profitPts / initialRiskPts;
 
@@ -3126,10 +3547,11 @@ void Scalp_ManageActivePositions()
          continue;
       }
 
-      // 2. Break-Even Protection (+1.0R)
+      // 2. Delayed Break-Even Protection (+1.25R / +1.5R default)
+      double beTriggerR = (InpScalpDelayedBE_R > 0.0) ? InpScalpDelayedBE_R : InpBreakEvenTriggerRR;
       if(InpUseBreakEven && trackIdx >= 0 && !m_trackedPositions[trackIdx].breakEvenApplied)
       {
-         if(currentR >= InpBreakEvenTriggerRR)
+         if(currentR >= beTriggerR)
          {
             double lockDist = InpBreakEvenLockPips * m_pipSize;
             double beSL     = (type == POSITION_TYPE_BUY) ? (openPrice + lockDist) : (openPrice - lockDist);
@@ -3143,7 +3565,8 @@ void Scalp_ManageActivePositions()
                   if(retcode == TRADE_RETCODE_DONE)
                   {
                      m_trackedPositions[trackIdx].breakEvenApplied = true;
-                     PrintFormat("[SCALP BE OK] Position #%I64u moved to BE at %.5f retcode=%u", ticket, beSL, retcode);
+                     PrintFormat("[SCALP BE OK] Position #%I64u moved to BE at %.5f (Trigger=%.2fR, Locked=+%.1fpips) retcode=%u",
+                                 ticket, beSL, beTriggerR, InpBreakEvenLockPips, retcode);
                   }
                }
             }
@@ -3195,7 +3618,9 @@ void Scalp_ManageActivePositions()
       }
 
       // 4. Opposing Major S/R Wall Reached
-      if(InpScalpDynamicExits && currentR >= 0.5)
+      // Hard Rule: Suppress S/R wall exit if currentR < 1.0R (when InpScalpProhibitProfitExitBelow1R is true)
+      // or if runner mode is active (let trailing stop manage it)
+      if(InpScalpDynamicExits && !InpScalpRunnerMode && (!InpScalpProhibitProfitExitBelow1R || currentR >= 1.0))
       {
          int srCount = ArraySize(m_srZones);
          for(int z = 0; z < srCount; z++)
@@ -3245,7 +3670,7 @@ bool Scalp_EvaluateAndExecuteEntry(bool isBuy, const MqlRates &rates[], int copi
    // 2. Calculate Pressure & Volatility Compression Score
    m_scalpState.pressureScore = Scalp_CalculatePressureScore(rates, copied, atr, emaVal, isBuy);
 
-   // 3. S/R Proximity & Room Calculation
+   // 3. S/R Proximity & Stop Loss Calculation
    double slPrice = isBuy ? (m_scalpState.pullbackExtreme - (InpStopLossBufferPips * m_pipSize))
                           : (m_scalpState.pullbackExtreme + (InpStopLossBufferPips * m_pipSize));
    double currentPrice = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -3253,12 +3678,43 @@ bool Scalp_EvaluateAndExecuteEntry(bool isBuy, const MqlRates &rates[], int copi
    if(!Scalp_CheckSRProximity(currentPrice, slPrice, isBuy)) return false;
    double srRoomR = Scalp_GetSRRoomR(currentPrice, slPrice, isBuy);
 
-   // 4. Calculate Composite Setup Score & Grade
+   // 4. Classical Chart Pattern Detection (Triangles, Rectangles, Wedges, Pennants, Tops/Bottoms)
+   SChartPattern pattern;
+   if(InpScalpUsePatternEngine)
+      pattern = Scalp_DetectChartPattern(rates, copied, atr, isBuy);
+   else
+   {
+      ZeroMemory(pattern);
+      pattern.type = PATTERN_NONE;
+   }
+
+   // 5. Staircase Structure Quality Score (Al Brooks / PATS)
+   double staircaseScore = Scalp_CalculateStaircaseScore(rates, copied, isBuy, atr);
+   if(staircaseScore < InpScalpMinStaircaseScore)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP REJECT] %s: Staircase structure score too low (%.1f < %.1f)",
+                     baseTag, staircaseScore, InpScalpMinStaircaseScore);
+      return false;
+   }
+
+   // 6. Three-Layer Target Plan & Hard Pre-Trade Feasibility Gate
+   STargetPlan targetPlan = Scalp_EvaluateTargetPlan(currentPrice, slPrice, isBuy, atr, pattern);
+   if(!targetPlan.isAcceptable)
+   {
+      if(InpEnableDebugLog)
+         PrintFormat("[SCALP REJECT] %s: Planned room insufficient (T1=%.2fR < Min=%.2fR) Obstacle: %s",
+                     baseTag, targetPlan.potentialRewardR, InpScalpMinPlannedRR, targetPlan.nearestObstacleDesc);
+      return false;
+   }
+
+   // 7. Calculate Composite Setup Score & Grade
    m_scalpState.setupScore = Scalp_CalculateSetupScore(m_scalpState.trendRegime, m15Regime,
                                                       m_scalpState.pullbackType, m_scalpState.pressureScore,
-                                                      rates[1], isBuy, atr, srRoomR, m_scalpState.setupGrade);
+                                                      rates[1], isBuy, atr, srRoomR, staircaseScore, pattern,
+                                                      m_scalpState.setupGrade);
 
-   // 5. Quality Filter Gates
+   // 8. Quality Filter Gates
    if(InpScalpUsePressureEngine && m_scalpState.pressureScore < InpScalpMinPressureScore)
    {
       if(InpEnableDebugLog)
@@ -3275,14 +3731,18 @@ bool Scalp_EvaluateAndExecuteEntry(bool isBuy, const MqlRates &rates[], int copi
       return false;
    }
 
-   // 6. Volume Confirmation (if active)
+   // 9. Volume Confirmation (if active)
    if(!Scalp_CheckVolumeConfirmation(rates, 1, m_scalpState.pullbackStartShift, 1)) return false;
 
-   // 7. Order Execution with Grade Tag
-   string tag = StringFormat("%s [%s|Scr=%.0f|Prs=%.2f]", baseTag, EnumToString(m_scalpState.setupGrade), m_scalpState.setupScore, m_scalpState.pressureScore);
+   // 10. Order Execution with Target Plan & Grade Tag
+   string patDesc = (pattern.type != PATTERN_NONE) ? EnumToString(pattern.type) : "NO_PAT";
+   string tag = StringFormat("%s [%s|Scr=%.0f|Prs=%.2f|%s|Stair=%.0f|T1=%.1fR|T2=%.1fR]",
+                             baseTag, EnumToString(m_scalpState.setupGrade), m_scalpState.setupScore,
+                             m_scalpState.pressureScore, patDesc, staircaseScore,
+                             targetPlan.target1R, targetPlan.target2R);
    double triggerPrice = isBuy ? rates[1].high : rates[1].low;
 
-   if(Scalp_ExecuteOrder(isBuy, triggerPrice, slPrice, tag))
+   if(Scalp_ExecuteOrder(isBuy, triggerPrice, slPrice, tag, targetPlan))
    {
       m_scalpState.state = SCALP_STATE_IN_POSITION;
       return true;
@@ -3793,8 +4253,10 @@ void Scalp_OnTick()
             }
 
             // Guard 3: Context-Aware Momentum Stall
-            // Only triggers if in solid profit (>= InpScalpStallMinR) AND price actually crosses EMA or produces 2 opposing bars
-            if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= InpScalpStallMinR && m_scalpBarsInTrade >= InpScalpStallBars)
+            // Only triggers if in solid profit (>= minStallR) AND price actually crosses EMA or produces 2 opposing bars
+            // Hard Rule: Prohibit discretionary profit exits below 1.0R if enabled
+            double minStallR = InpScalpProhibitProfitExitBelow1R ? MathMax(InpScalpStallMinR, 1.0) : InpScalpStallMinR;
+            if(InpScalpDynamicExits && InpScalpExitOnMomentumStall && currentR >= minStallR && m_scalpBarsInTrade >= InpScalpStallBars)
             {
                bool isRealStall = false;
                if(type == POSITION_TYPE_BUY)
@@ -3831,8 +4293,9 @@ void Scalp_OnTick()
                }
                else if(ctSev == COUNTER_STRONG)
                {
-                  // If in profit, exit to lock in accrued gain
-                  if(currentR >= 0.5)
+                  // If in profit, exit to lock in accrued gain (prohibit exit below 1.0R if enabled)
+                  double minOppositeR = InpScalpProhibitProfitExitBelow1R ? 1.0 : 0.5;
+                  if(currentR >= minOppositeR)
                   {
                      Scalp_ClosePosition(ticket, SCALP_EXIT_OPPOSITE_PA_REVERSAL,
                                          StringFormat("Strong Opposing Momentum Bar (R=%.2f)", currentR));

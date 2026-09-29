@@ -179,3 +179,97 @@
 * **WHAT IT MEANS**: Dividing historical data into an in-sample (optimization) period and an out-of-sample (forward test) period. It tests if the parameters found during optimization actually hold up on unseen data.
 * **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**: Use MT5's built-in "Forward Testing" tab. Set it to 1/2 or 1/3. Optimize over 2022-2023. Automatically run the best results over 2024. If the forward result is negative, discard the parameters as curve-fitted.
 * **RISKS / LIMITATIONS**: Can still lead to "meta-overfitting" if a trader continuously tweaks the strategy logic just to pass the walk-forward test.
+
+## 6. V7 Next-Gen: Realized R & Pattern Geometry Research
+
+### Entry 18: Pre-Trade Structural Feasibility & The "Minimum Planned R:R" Gate
+* **SOURCE**: Professional Price Action & Quantitative Trade Sizing
+* **AUTHOR**: Mark Douglas / Bob Volman / Al Brooks
+* **URL**: https://www.albrooks.com
+* **CONCEPT**: Minimum Planned Reward-to-Risk (Feasibility Filter)
+* **WHAT IT MEANS**: A high win rate is useless if the structural space available before the first major obstacle is less than 1R. Entering when resistance is 0.5R or 0.6R away forces the trader to either take an inferior profit or watch the trade reverse from the wall. The decision to reject must be made *before* order placement by verifying that the distance to the nearest opposing structural hurdle is at least 1.5R, preferably >= 2.0R.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Compute `InitialRiskDistance = |EntryPrice - StopLossPrice|`.
+  - Locate `NearestObstacle = Lowest Resistance (Buys) or Highest Support (Sells)`.
+  - Calculate `PotentialRewardR = |NearestObstacle - EntryPrice| / InitialRiskDistance`.
+  - If `PotentialRewardR < 1.0R`, reject immediately.
+  - If `1.0R <= PotentialRewardR < 1.5R`, reject unless setup quality is A+.
+  - If `PotentialRewardR >= 2.0R`, prioritize execution.
+* **RISKS / LIMITATIONS**: Strict room requirements reduce trade frequency in tight ranges, but significantly increase average realized R by eliminating "cramped" trades.
+
+### Entry 19: Three-Layer Target Model (Structural, Pattern, Momentum)
+* **SOURCE**: Technical Analysis of Stock Trends (Edwards & Magee) / Al Brooks
+* **AUTHOR**: Robert D. Edwards, John Magee, Al Brooks
+* **URL**: https://www.edwards-magee.com
+* **CONCEPT**: Multi-Target Projection Model
+* **WHAT IT MEANS**: Markets have three tiers of price targets:
+  1. **Structural Target (T1)**: The nearest key swing pivot, S/R zone, or prior session extreme.
+  2. **Pattern Target (T2)**: The classical measured move projected from the geometry of the preceding consolidation (e.g. triangle height added to breakout, rectangle height, or flagpole length).
+  3. **Momentum Runner Target (T3)**: An open trailing target that allows strong institutional trend legs to reach 2.5R to 5.0R without premature fixed TP capping.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Calculate T1 (nearest S/R level).
+  - Calculate T2 (measured move: `BreakoutPrice + PatternHeight`).
+  - Calculate T3 (trailing micro-pivot stop initiated after reaching >= 1.5R).
+  - Never exit a profitable trade below +1.0R on arbitrary minor candles.
+* **RISKS / LIMITATIONS**: Pattern measured moves are theoretical projections; market momentum may stall before T2 is reached, necessitating structural trailing stops.
+
+### Entry 20: Classical Continuation & Reversal Chart Patterns (15-Pattern Reference)
+* **SOURCE**: Technical Analysis of Financial Markets / Edwards & Magee
+* **AUTHOR**: John J. Murphy, Edwards & Magee
+* **URL**: https://www.investopedia.com/terms/c/continuationpattern.asp
+* **CONCEPT**: Classical Chart Geometries as Pressure & Target Containers
+* **WHAT IT MEANS**: Patterns are not isolated trading systems; they are visual representations of supply/demand compression and market participant psychology:
+  - **Ascending Triangle**: Flat horizontal resistance with ascending higher lows. Indicates aggressive limit buyers lifting bids into a supply wall. Measured move = height of triangle added to breakout.
+  - **Descending Triangle**: Flat support with descending lower highs. Indicates aggressive sellers pushing lower. Measured move = height subtracted from breakdown.
+  - **Bullish / Bearish Pennants & Flags**: Sharp impulse pole followed by 3-8 bars of tight symmetrical compression. Measured move = flagpole length projected from breakout point.
+  - **Rectangles**: Parallel upper and lower boundaries. High-quality breakouts occur when price forms higher lows near the ceiling (bull) or lower highs near the floor (bear).
+  - **Wedges**: Converging trendlines where both lines slope in the same direction. Falling wedge in an uptrend represents bull continuation; rising wedge in a downtrend represents bear continuation.
+  - **Double Tops/Bottoms & Head & Shoulders**: Reversal patterns activated only upon a confirmed break of the neckline.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Detect boundaries via linear regression or swing pivot connects.
+  - Confirm breakout with a candle closing beyond the pattern boundary with volume expansion.
+  - Project target: `Target2 = BreakoutPrice + PatternHeight`.
+* **RISKS / LIMITATIONS**: Algorithmic pattern detection can suffer from false positives if swing points are poorly filtered. Requires strict validation against multi-timeframe trend context.
+
+### Entry 21: Breakout Confirmation vs Retest-and-Hold
+* **SOURCE**: Bob Volman (Understanding Price Action) / Al Brooks
+* **AUTHOR**: Bob Volman
+* **URL**: https://moecapital.com
+* **CONCEPT**: Breakout Follow-Through and Retest Dynamics
+* **WHAT IT MEANS**: Many breakouts initially falter as early breakout traders take profits or counter-trend traders attempt a fade. A true institutional continuation exhibits one of two behaviors:
+  1. **Immediate Expansion**: Massive momentum candle closing in extreme 15% with volume expansion that never looks back.
+  2. **Retest and Hold**: Price breaks out, pulls back gently to the broken boundary (resistance becomes support), prints a rejection wick testing the level, and holds.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Track broken level: `LevelPrice`.
+  - Detect pullback to `LevelPrice +- 2 pips`.
+  - Verify that low of retest bar does not close back inside the pattern by more than 0.3 ATR.
+  - Enter on the break of the retest confirmation candle.
+* **RISKS / LIMITATIONS**: Waiting for a retest misses the strongest runaway trend breakouts. Therefore, the engine must support both confirmed expansion entries and retest entries.
+
+### Entry 22: Delayed Break-Even & Elimination of BE Scratch Damage
+* **SOURCE**: Quantitative Trading Systems & Performance Forensics
+* **AUTHOR**: Robert Pardo / Perry Kaufman
+* **URL**: https://www.pardo.com
+* **CONCEPT**: Break-Even Placement Inefficiency (The "BE Trap")
+* **WHAT IT MEANS**: Moving stop loss to exact entry price at +1.0R is a primary cause of equity bleed in trend-following scalpers. Healthy pullbacks regularly retrace to the breakout level (+0.5R to +1.0R) before resuming. Premature BE triggers turn potentially large +2R to +4R winners into 0-R scratches.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Delay moving stop to BE until price reaches **+1.25R to +1.50R**, or move stop to the micro-swing higher low rather than exact entry price.
+  - Maintain a 2-bar low/high cushion for trailing rather than a tight single-bar trail.
+* **RISKS / LIMITATIONS**: Allowing trades to retrace slightly further increases the risk of giving back a +1R gain if the trend abruptly collapses, but significantly increases the percentage of trades that successfully reach +2R and +3R.
+
+### Entry 23: MFE / MAE Forensics & MFE Capture Ratio
+* **SOURCE**: The New Trading Systems and Methods
+* **AUTHOR**: Perry Kaufman / John Sweeney (Maximum Adverse Excursion)
+* **URL**: https://www.wiley.com
+* **CONCEPT**: Maximum Favorable Excursion (MFE) and MFE Capture Ratio
+* **WHAT IT MEANS**: 
+  - **MFE**: The maximum theoretical profit (in R) reached during the life of a trade.
+  - **MAE**: The maximum drawdown (in R) experienced before trade conclusion.
+  - **MFE Capture Ratio**: Realized R / MFE. If a strategy has an average MFE of 2.5R but only realizes 0.5R, its capture ratio is 20%, proving that the exit engine is suffocating trades. A healthy trend-following scalper should achieve an MFE capture ratio of >= 45%.
+* **HOW IT COULD BE TRANSLATED INTO A TESTABLE RULE**:
+  - Record bar-by-bar high/low extremes during trade lifecycle.
+  - Calculate `MFE_R = Max(High - Entry) / Risk` for buys.
+  - Calculate `Realized_R = (ExitPrice - Entry) / Risk`.
+  - Calculate `CaptureRatio = Realized_R / MFE_R`.
+* **RISKS / LIMITATIONS**: MFE can be skewed by sudden news spikes that instantly reverse. Evaluating median MFE alongside average MFE provides a more robust metric.
+
