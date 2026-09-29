@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Antigravity AI"
 #property link      "https://github.com/yossefbelal1/PriceAction-Pro-MT5"
-#property version   "4.00"
+#property version   "4.10"
 #property description "Professional Price Action Trading System with Strict Mode Separation:"
 #property description "MODE A: BOOK_EXACT (Pure Price Action from 97-Page Course: Swings, S/R, Flips, 50% Confluence)"
 #property description "MODE B: ENHANCED (Optional Overlays: EMA, RSI, VSA, HTF Order Blocks/FVG)"
@@ -257,7 +257,9 @@ void              UpdateSRZones();
 ENUM_MARKET_TREND DetectMarketTrend();
 bool              IsCandleInteractingWithSR(const MqlRates &candle, bool forBuy, bool &isFlippedLevel);
 bool              IsTesting50PercentSwingRetrace(const MqlRates &candle, bool forBuy);
-bool              ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey = false);
+bool              ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey = false, bool isIBReversal = false);
+bool              IsOCOOrderFilled(ulong orderTicket);
+bool              IsOCOOrderActive(ulong orderTicket);
 bool              EvaluatePinBar(const MqlRates &rates[], int i, bool &isBullish, bool &isBearish);
 bool              EvaluateInsideBarStructure(const MqlRates &rates[], int i, int &motherShift, int &insideCount);
 bool              EvaluateFakey(const MqlRates &rates[], int i, bool &isBullFakey, bool &isBearFakey, double &extremePrice);
@@ -830,7 +832,7 @@ bool IsTesting50PercentSwingRetrace(const MqlRates &candle, bool forBuy)
 //| CONFLUENCE ENGINE VALIDATION (PDF Pages 64-70)                   |
 //| T.T.L.F: Trend, Level, Signal, 50% Retracement                   |
 //+------------------------------------------------------------------+
-bool ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey)
+bool ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND trend, bool isFakey, bool isIBReversal = false)
 {
    // 1. Horizontal S/R Level Interaction Check
    bool isFlipped = false;
@@ -841,18 +843,18 @@ bool ValidateConfluence(const MqlRates &candle, bool forBuy, ENUM_MARKET_TREND t
    if(forBuy)  trendValid = (trend == TREND_BULLISH || trend == TREND_RANGE);
    if(!forBuy) trendValid = (trend == TREND_BEARISH || trend == TREND_RANGE);
 
-   // Special PDF Rule (Page 92): Counter-trend Fakeys are valid ONLY at confirmed Key Levels
-   if(isFakey)
+   // Special PDF Rule (Pages 84 & 92): Counter-trend Fakeys and Inside Bar Reversals require a confirmed Key S/R Level
+   if(isFakey || isIBReversal)
    {
       bool isCounterTrend = (forBuy && trend == TREND_BEARISH) || (!forBuy && trend == TREND_BULLISH);
-      if((isCounterTrend || trend == TREND_RANGE) && InpFakeyRequireKeyLevel)
+      if((isCounterTrend || trend == TREND_RANGE) && (InpFakeyRequireKeyLevel || isIBReversal))
       {
          if(!levelValid)
          {
-            if(InpEnableDebugLog) Print("[Fakey Rejected] Counter-trend or range fakey requires a confirmed Key S/R level.");
+            if(InpEnableDebugLog) PrintFormat("[%s Rejected] Counter-trend or range setup requires a confirmed Key S/R level.", isFakey ? "Fakey" : "IB Reversal");
             return false;
          }
-         trendValid = true; // Key level satisfies confluence for Fakey reversal
+         trendValid = true; // Key level satisfies confluence for reversal
       }
    }
 
@@ -999,24 +1001,37 @@ bool EvaluateFakey(const MqlRates &rates[], int i, bool &isBullFakey, bool &isBe
    isBearFakey = false;
    extremePrice = 0.0;
 
-   // Bar i = False-break candle
-   // Bar i+1 = Inside bar (or last of coiling inside bars)
-   // Bar i+2 = Mother bar
-   if(rates[i + 1].high > rates[i + 2].high || rates[i + 1].low < rates[i + 2].low)
+   // Check if bar i+1 is part of an Inside Bar structure (supports 1, 2, or 3 nested inside bars)
+   int motherShift = -1;
+   int insideCount = 0;
+   if(!EvaluateInsideBarStructure(rates, i + 1, motherShift, insideCount))
       return false;
 
+   if(insideCount < 1 || motherShift <= (i + 1))
+      return false;
+
+   // Reference boundary is the structure formed by the inside bar(s) and mother bar
    double minBreak = InpFakeyMinBreakPoints * m_point;
 
-   // Bullish Fakey: Penetrated below Inside Bar Low by at least minBreak, closed back above
-   if(rates[i].low <= (rates[i + 1].low - minBreak) && rates[i].close > rates[i + 1].low)
+   // Find the extreme boundary of the inside bar structure before the false break
+   double structureLow  = rates[i + 1].low;
+   double structureHigh = rates[i + 1].high;
+   for(int k = i + 2; k <= motherShift; k++)
+   {
+      structureLow  = MathMin(structureLow, rates[k].low);
+      structureHigh = MathMax(structureHigh, rates[k].high);
+   }
+
+   // Bullish Fakey: Penetrated below structure low by at least minBreak, and closed back above structure low
+   if(rates[i].low <= (structureLow - minBreak) && rates[i].close > rates[i + 1].low)
    {
       isBullFakey  = true;
       extremePrice = rates[i].low;
       return true;
    }
 
-   // Bearish Fakey: Penetrated above Inside Bar High by at least minBreak, closed back below
-   if(rates[i].high >= (rates[i + 1].high + minBreak) && rates[i].close < rates[i + 1].high)
+   // Bearish Fakey: Penetrated above structure high by at least minBreak, and closed back below structure high
+   if(rates[i].high >= (structureHigh + minBreak) && rates[i].close < rates[i + 1].high)
    {
       isBearFakey  = true;
       extremePrice = rates[i].high;
@@ -1390,19 +1405,23 @@ bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
    bool allowBuy  = false;
    bool allowSell = false;
 
-   // 1. Continuation Mode (Evaluated independently)
+   // 1. Continuation Mode: Routes through shared ValidateConfluence engine
+   //    Requires Trend alignment + (Key Level OR 50% Swing Retracement)
    if(InpIBContinuationOnly)
    {
-      if(trend == TREND_BULLISH) allowBuy  = true;
-      if(trend == TREND_BEARISH) allowSell = true;
+      if(trend == TREND_BULLISH && ValidateConfluence(mother, true, trend, false, false))
+         allowBuy  = true;
+      if(trend == TREND_BEARISH && ValidateConfluence(mother, false, trend, false, false))
+         allowSell = true;
    }
 
-   // 2. Reversal Mode (Evaluated independently - Prompt Section 14)
+   // 2. Reversal Mode: Routes through shared ValidateConfluence engine at Key S/R Levels
    if(InpIBReversalAtLevels)
    {
-      bool isFlipped = false;
-      if(IsCandleInteractingWithSR(mother, true, isFlipped))  allowBuy  = true;
-      if(IsCandleInteractingWithSR(mother, false, isFlipped)) allowSell = true;
+      if(ValidateConfluence(mother, true, trend, false, true))
+         allowBuy  = true;
+      if(ValidateConfluence(mother, false, trend, false, true))
+         allowSell = true;
    }
 
    // 3. Fallback if both modes disabled: allow dual breakout
@@ -1428,7 +1447,7 @@ bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          double tpPrice = CalculateTakeProfit(buyPrice, slPrice, true);
          if(ValidateBrokerDistance(buyPrice, slPrice, tpPrice))
          {
-            string comment = StringFormat("%s IB_BuyStop [%s]", modeTag, pairTag);
+            string comment = StringFormat("%s %s BuyStop", pairTag, (InpStrategyMode == MODE_BOOK_EXACT ? "BE" : "ENH"));
             if(m_trade.BuyStop(lot, buyPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, comment))
             {
                uint retcode = m_trade.ResultRetcode();
@@ -1457,7 +1476,7 @@ bool ExecuteInsideBarSetup(const MqlRates &rates[], int motherShift, int insideC
          double tpPrice = CalculateTakeProfit(sellPrice, slPrice, false);
          if(ValidateBrokerDistance(sellPrice, slPrice, tpPrice))
          {
-            string comment = StringFormat("%s IB_SellStop [%s]", modeTag, pairTag);
+            string comment = StringFormat("%s %s SellStop", pairTag, (InpStrategyMode == MODE_BOOK_EXACT ? "BE" : "ENH"));
             if(m_trade.SellStop(lot, sellPrice, _Symbol, slPrice, tpPrice, orderTimeType, expiry, comment))
             {
                uint retcode = m_trade.ResultRetcode();
@@ -1648,11 +1667,13 @@ void ManageActivePositions()
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
                      uint retcode = m_trade.ResultRetcode();
-                     if(retcode == TRADE_RETCODE_DONE)
+                     if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
                         PrintFormat("[Trailing OK] BUY Position #%I64u trailed to SL=%f retcode=%u", ticket, newSL, retcode);
                      else
                         PrintFormat("[Trailing WARN] BUY Position #%I64u retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
                   }
+                  else
+                     PrintFormat("[Trailing FAILED] BUY Position #%I64u PositionModify returned false. retcode=%u desc=%s", ticket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
                }
             }
          }
@@ -1666,11 +1687,13 @@ void ManageActivePositions()
                   if(m_trade.PositionModify(ticket, newSL, currentTP))
                   {
                      uint retcode = m_trade.ResultRetcode();
-                     if(retcode == TRADE_RETCODE_DONE)
+                     if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
                         PrintFormat("[Trailing OK] SELL Position #%I64u trailed to SL=%f retcode=%u", ticket, newSL, retcode);
                      else
                         PrintFormat("[Trailing WARN] SELL Position #%I64u retcode=%u desc=%s", ticket, retcode, m_trade.ResultRetcodeDescription());
                   }
+                  else
+                     PrintFormat("[Trailing FAILED] SELL Position #%I64u PositionModify returned false. retcode=%u desc=%s", ticket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
                }
             }
          }
@@ -1679,49 +1702,111 @@ void ManageActivePositions()
 }
 
 //+------------------------------------------------------------------+
+//| HELPER: Check if an OCO order has filled in history              |
+//+------------------------------------------------------------------+
+bool IsOCOOrderFilled(ulong orderTicket)
+{
+   if(orderTicket == 0) return false;
+   if(HistoryOrderSelect(orderTicket))
+   {
+      ENUM_ORDER_STATE state = (ENUM_ORDER_STATE)HistoryOrderGetInteger(orderTicket, ORDER_STATE);
+      return (state == ORDER_STATE_FILLED);
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| HELPER: Check if an OCO order is still active (placed)           |
+//+------------------------------------------------------------------+
+bool IsOCOOrderActive(ulong orderTicket)
+{
+   if(orderTicket == 0) return false;
+   if(OrderSelect(orderTicket))
+   {
+      ENUM_ORDER_STATE state = (ENUM_ORDER_STATE)OrderGetInteger(ORDER_STATE);
+      return (state == ORDER_STATE_PLACED);
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| MANAGE OCO PENDING ORDERS (Survives Restarts via Tag Search)     |
 //+------------------------------------------------------------------+
 void ManageOCOPendingPairs()
 {
-   // 1. In-Memory Pairs Scan
+   // 1. In-Memory Pairs Scan using order history/active state (not PositionSelectByTicket)
    int total = ArraySize(m_ocoPairs);
    for(int i = total - 1; i >= 0; i--)
    {
       if(!m_ocoPairs[i].isActive) continue;
 
-      bool buyFilled  = PositionSelectByTicket(m_ocoPairs[i].buyStopTicket);
-      bool sellFilled = PositionSelectByTicket(m_ocoPairs[i].sellStopTicket);
+      ulong buyTicket  = m_ocoPairs[i].buyStopTicket;
+      ulong sellTicket = m_ocoPairs[i].sellStopTicket;
+
+      bool buyFilled  = IsOCOOrderFilled(buyTicket);
+      bool sellFilled = IsOCOOrderFilled(sellTicket);
+
+      bool buyActive  = IsOCOOrderActive(buyTicket);
+      bool sellActive = IsOCOOrderActive(sellTicket);
 
       if(buyFilled)
       {
-         if(OrderSelect(m_ocoPairs[i].sellStopTicket))
+         if(sellActive)
          {
-            if(m_trade.OrderDelete(m_ocoPairs[i].sellStopTicket))
+            if(m_trade.OrderDelete(sellTicket))
             {
                uint retcode = m_trade.ResultRetcode();
-               PrintFormat("[OCO OK] Buy #%I64u filled. Deleted SellStop #%I64u retcode=%u", 
-                           m_ocoPairs[i].buyStopTicket, m_ocoPairs[i].sellStopTicket, retcode);
+               if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+               {
+                  PrintFormat("[OCO OK] Buy #%I64u filled. Deleted SellStop #%I64u retcode=%u", 
+                              buyTicket, sellTicket, retcode);
+               }
+               else
+               {
+                  PrintFormat("[OCO FAILED] OrderDelete SellStop #%I64u retcode=%u desc=%s",
+                              sellTicket, retcode, m_trade.ResultRetcodeDescription());
+               }
             }
             else
-               PrintFormat("[OCO FAILED] OrderDelete SellStop #%I64u retcode=%u desc=%s",
-                  m_ocoPairs[i].sellStopTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+            {
+               PrintFormat("[OCO FAILED] OrderDelete SellStop #%I64u returned false. retcode=%u desc=%s",
+                           sellTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+            }
          }
          m_ocoPairs[i].isActive = false;
+         continue;
       }
       else if(sellFilled)
       {
-         if(OrderSelect(m_ocoPairs[i].buyStopTicket))
+         if(buyActive)
          {
-            if(m_trade.OrderDelete(m_ocoPairs[i].buyStopTicket))
+            if(m_trade.OrderDelete(buyTicket))
             {
                uint retcode = m_trade.ResultRetcode();
-               PrintFormat("[OCO OK] Sell #%I64u filled. Deleted BuyStop #%I64u retcode=%u",
-                           m_ocoPairs[i].sellStopTicket, m_ocoPairs[i].buyStopTicket, retcode);
+               if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+               {
+                  PrintFormat("[OCO OK] Sell #%I64u filled. Deleted BuyStop #%I64u retcode=%u",
+                              sellTicket, buyTicket, retcode);
+               }
+               else
+               {
+                  PrintFormat("[OCO FAILED] OrderDelete BuyStop #%I64u retcode=%u desc=%s",
+                              buyTicket, retcode, m_trade.ResultRetcodeDescription());
+               }
             }
             else
-               PrintFormat("[OCO FAILED] OrderDelete BuyStop #%I64u retcode=%u desc=%s",
-                  m_ocoPairs[i].buyStopTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+            {
+               PrintFormat("[OCO FAILED] OrderDelete BuyStop #%I64u returned false. retcode=%u desc=%s",
+                           buyTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+            }
          }
+         m_ocoPairs[i].isActive = false;
+         continue;
+      }
+
+      // If neither is active (e.g. both expired or manually deleted), deactivate pair
+      if(!buyActive && !sellActive)
+      {
          m_ocoPairs[i].isActive = false;
       }
    }
@@ -1736,8 +1821,10 @@ void ManageOCOPendingPairs()
       int tagPos = StringFind(posComment, "IB_OCO_");
       if(tagPos < 0) continue;
 
-      // Extract OCO tag
-      string ocoTag = StringSubstr(posComment, tagPos, 20);
+      // Extract pure OCO tag (delimited by space, closing bracket, or end of string)
+      int endSep = StringFind(posComment, " ", tagPos);
+      if(endSep < 0) endSep = StringFind(posComment, "]", tagPos);
+      string ocoTag = (endSep > tagPos) ? StringSubstr(posComment, tagPos, endSep - tagPos) : StringSubstr(posComment, tagPos);
 
       // Check if an opposing pending order with this OCO tag is still open
       for(int o = OrdersTotal() - 1; o >= 0; o--)
@@ -1751,11 +1838,21 @@ void ManageOCOPendingPairs()
                if(m_trade.OrderDelete(ocoOrderTicket))
                {
                   uint retcode = m_trade.ResultRetcode();
-                  PrintFormat("[OCO Recovery OK] Tag %s. Deleted pending #%I64u retcode=%u", ocoTag, ocoOrderTicket, retcode);
+                  if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+                  {
+                     PrintFormat("[OCO Recovery OK] Tag %s. Deleted pending #%I64u retcode=%u", ocoTag, ocoOrderTicket, retcode);
+                  }
+                  else
+                  {
+                     PrintFormat("[OCO Recovery FAILED] Tag %s. OrderDelete #%I64u retcode=%u desc=%s",
+                                 ocoTag, ocoOrderTicket, retcode, m_trade.ResultRetcodeDescription());
+                  }
                }
                else
-                  PrintFormat("[OCO Recovery FAILED] Tag %s. OrderDelete #%I64u retcode=%u desc=%s",
-                     ocoTag, ocoOrderTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+               {
+                  PrintFormat("[OCO Recovery FAILED] Tag %s. OrderDelete #%I64u returned false. retcode=%u desc=%s",
+                              ocoTag, ocoOrderTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+               }
             }
          }
       }
@@ -1836,9 +1933,15 @@ void CleanExpiredPendingOrders()
             {
                ulong expTicket = m_order.Ticket();
                if(m_trade.OrderDelete(expTicket))
-                  PrintFormat("[CleanExpired OK] Deleted expired order #%I64u retcode=%u", expTicket, m_trade.ResultRetcode());
+               {
+                  uint retcode = m_trade.ResultRetcode();
+                  if(retcode == TRADE_RETCODE_DONE || retcode == TRADE_RETCODE_PLACED)
+                     PrintFormat("[CleanExpired OK] Deleted expired order #%I64u retcode=%u", expTicket, retcode);
+                  else
+                     PrintFormat("[CleanExpired WARN] Order #%I64u retcode=%u desc=%s", expTicket, retcode, m_trade.ResultRetcodeDescription());
+               }
                else
-                  PrintFormat("[CleanExpired FAILED] Order #%I64u retcode=%u desc=%s", expTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+                  PrintFormat("[CleanExpired FAILED] Order #%I64u returned false. retcode=%u desc=%s", expTicket, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
             }
          }
       }
