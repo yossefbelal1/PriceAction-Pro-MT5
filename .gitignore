@@ -1,0 +1,26 @@
+# OS Junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs & Temp files
+*.log
+*.tmp
+*.temp
+*.cache
+*.swp
+*.bak
+
+# Python & Dev Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+scratch/
+
+# MetaTrader temporary data & caches
+*.tst
+*.opt
+*.mtd
+*.cl
+Tester/
+terminal.log
