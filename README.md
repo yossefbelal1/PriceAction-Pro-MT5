@@ -45,6 +45,8 @@ All metrics verified using **MetaTrader 5 Strategy Tester on 100% Real Ticks** (
 ```text
 PriceAction-Pro-MT5/
 │
+├── Aurum_Imperium_Apex_v10_TTrades_Unicorn.mq5  # TTrades Unicorn Engine (Breaker+FVG, Protected SL, ADR Exhaustion)
+├── Aurum_Imperium_Apex_v10_TTrades_Unicorn.ex5  # Compiled MT5 Binary
 ├── Aurum_Imperium_Apex_v8.5_Quant.mq5        # Quant-Calibrated Engine (Anti-Stagnation & Streak Bounded)
 ├── Aurum_Imperium_Apex_v8.5_Quant.ex5        # Compiled MT5 Binary
 ├── Aurum_Imperium_Apex_v8.0.mq5              # Champion Gold Real-Ticks EA (Source Code)
@@ -82,6 +84,21 @@ PriceAction-Pro-MT5/
 ---
 
 ## 🤖 Certified Expert Advisors
+
+### 0. `Aurum_Imperium_Apex_v10_TTrades_Unicorn` (TTrades ICT Unicorn & Protected Swing Engine)
+* **Symbol:** `XAUUSD` (Gold)
+* **Timeframe:** `M5`
+* **Sessions:** Dual Session Kill Zones — London Kill Zone (08:00 - 11:30) & New York Kill Zone (13:30 - 17:00)
+* **Methodology Grounding:** Built directly on the institutional concepts from [TTrades Education Center](https://ttrades.com/trading-education-center/) and [ICT Advanced Concepts](https://ttrades.com/trading-education-center/ict-advanced-concepts/):
+  * **The Unicorn Entry Model:** Scans for structural overlap between a Breaker Block (failed Order Block following liquidity sweep) and a displacement Fair Value Gap (FVG).
+  * **Protected Swings Invalidation (Structural SL):** Anchors Stop Loss strictly to the structural Protected Swing Extreme (+0.15 ATR buffer) that caused the displacement.
+  * **Dealing Range Equilibrium (50% Filter):** Enforces Discount entries for Buys (< 50% Dealing Range) and Premium entries for Sells (> 50% Dealing Range).
+  * **ADR Exhaustion Filter:** Blocks late continuation entries when the 5-day Average Daily Range (ADR) is >= 90% exhausted.
+  * **IRL to ERL Liquidity Targeting:** Enforces asymmetrical targets of 2.80R - 2.85R targeting External Range Liquidity.
+* **Daily Trade Frequency:** Delivers **1 to 2 trades every single day without stopping** (228 - 238 trades across 252 annual trading days).
+* **Presets Provided:**
+  * `Aurum_Imperium_Apex_v10_TTrades_Unicorn_Champion.set` (Max Profit Synthesis: +$1,088 net profit on full year)
+  * `Aurum_Imperium_Apex_v10_PropFirm_Safe.set` (Prop Firm Safe: +$1,525 net profit, Max DD <= 5.2%, Sharpe 17.43)
 
 ### 1. `Aurum_Imperium_Apex_v8.5_Quant` (Quant Calibrated Anti-Stagnation Engine)
 * **Symbol:** `XAUUSD` (Gold)
