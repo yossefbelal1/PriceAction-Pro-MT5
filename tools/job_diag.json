@@ -1,0 +1,10 @@
+[
+  {
+    "id": "V12_Diag_June",
+    "expert": "Aurum_Imperium_Apex_v12_TTrades_Mechanical.ex5",
+    "base_ini": "configs/v12_ttrades_mechanical.ini",
+    "from": "2026.06.01",
+    "to": "2026.07.01",
+    "model": 4
+  }
+]
