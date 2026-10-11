@@ -1,0 +1,38 @@
+[
+  {
+    "id": "V11_Institutional_Balanced_OOS",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_institutional_balanced.ini",
+    "from": "2026.06.01",
+    "to": "2026.10.01"
+  },
+  {
+    "id": "V11_Institutional_PropFirm_Safe_OOS",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_institutional_balanced.ini",
+    "from": "2026.06.01",
+    "to": "2026.10.01",
+    "overrides": {
+      "RiskPercent": "0.70",
+      "MaxAllowedDailyDD": "3.00",
+      "MaxAllowedTotalDD": "4.50"
+    }
+  },
+  {
+    "id": "V11_Institutional_Growth_OOS",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_institutional_balanced.ini",
+    "from": "2026.06.01",
+    "to": "2026.10.01",
+    "overrides": {
+      "RiskPercent": "1.00"
+    }
+  },
+  {
+    "id": "V11_Institutional_Balanced_FY",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_institutional_balanced.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01"
+  }
+]

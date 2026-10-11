@@ -1,0 +1,10 @@
+[
+  {"id":"E1a_Timing_0815_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"LondonKillZoneStartMin":"15"}},
+  {"id":"E1b_Timing_0830_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"LondonKillZoneStartMin":"30"}},
+  {"id":"E2a_StructSL_LB6_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"UseStructuralSL":"true","StructSL_Lookback":"6","StructSL_BufferATR":"0.15"}},
+  {"id":"E2b_StructSL_LB10_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"UseStructuralSL":"true","StructSL_Lookback":"10","StructSL_BufferATR":"0.20"}},
+  {"id":"E3a_BE_Wider_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"BE_TriggerATR":"1.65","BE_OffsetPoints":"120"}},
+  {"id":"E3b_BE_Trail_Expanded_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"BE_TriggerATR":"1.75","BE_OffsetPoints":"150","Trail_StartATR":"2.0"}},
+  {"id":"E5a_ADX_Min27_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"ADX_Min":"27.0"}},
+  {"id":"E5b_ADX_Min30_FY","expert":"Aurum_Imperium_Apex_v8.0_Repaired.ex5","base_ini":"reports/phase3/R1_v80_Repaired_FY.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"ADX_Min":"30.0"}}
+]

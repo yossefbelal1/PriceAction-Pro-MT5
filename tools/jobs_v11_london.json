@@ -1,0 +1,40 @@
+[
+  {
+    "id": "V11_London_Institutional_OOS",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_london_institutional.ini",
+    "from": "2026.06.01",
+    "to": "2026.10.01"
+  },
+  {
+    "id": "V11_London_Institutional_FY",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_london_institutional.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01"
+  },
+  {
+    "id": "V11_London_UltraSafe_OOS",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_london_institutional.ini",
+    "from": "2026.06.01",
+    "to": "2026.10.01",
+    "overrides": {
+      "RiskPercent": "0.70",
+      "MaxAllowedDailyDD": "3.00",
+      "MaxAllowedTotalDD": "4.50"
+    }
+  },
+  {
+    "id": "V11_London_UltraSafe_FY",
+    "expert": "Aurum_Imperium_Apex_v11_Institutional.ex5",
+    "base_ini": "configs/v11_london_institutional.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01",
+    "overrides": {
+      "RiskPercent": "0.70",
+      "MaxAllowedDailyDD": "3.00",
+      "MaxAllowedTotalDD": "4.50"
+    }
+  }
+]
