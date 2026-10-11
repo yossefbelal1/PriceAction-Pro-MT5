@@ -1,0 +1,52 @@
+[
+  {
+    "id": "V12_Mechanical_Synthesis_FY",
+    "expert": "Aurum_Imperium_Apex_v12_TTrades_Mechanical.ex5",
+    "base_ini": "configs/v12_ttrades_mechanical.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01",
+    "model": 1
+  },
+  {
+    "id": "V12_Model_Breaker_FY",
+    "expert": "Aurum_Imperium_Apex_v12_TTrades_Mechanical.ex5",
+    "base_ini": "configs/v12_ttrades_mechanical.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01",
+    "model": 1,
+    "overrides": {
+      "ActiveEntryModel": "2"
+    }
+  },
+  {
+    "id": "V12_PropFirm_UltraSafe_FY",
+    "expert": "Aurum_Imperium_Apex_v12_TTrades_Mechanical.ex5",
+    "base_ini": "configs/v12_ttrades_mechanical.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01",
+    "model": 1,
+    "overrides": {
+      "RiskPercent": "0.65",
+      "TradeNewYorkSession": "false",
+      "MaxTradesPerDay": "1",
+      "MaxAllowedDailyDD": "3.00",
+      "MaxAllowedTotalDD": "4.50"
+    }
+  },
+  {
+    "id": "V12_Model_Breaker_UltraSafe_FY",
+    "expert": "Aurum_Imperium_Apex_v12_TTrades_Mechanical.ex5",
+    "base_ini": "configs/v12_ttrades_mechanical.ini",
+    "from": "2025.10.01",
+    "to": "2026.10.01",
+    "model": 1,
+    "overrides": {
+      "ActiveEntryModel": "2",
+      "RiskPercent": "0.60",
+      "TradeNewYorkSession": "false",
+      "MaxTradesPerDay": "1",
+      "MaxAllowedDailyDD": "3.00",
+      "MaxAllowedTotalDD": "4.00"
+    }
+  }
+]

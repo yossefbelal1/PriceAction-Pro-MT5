@@ -1,0 +1,4 @@
+﻿[
+ {"id":"B1_v80_original_FY","expert":"Aurum_Imperium_Apex_v8.0.ex5","base_ini":"configs/v80_london_lock120_risk095.ini","from":"2025.10.01","to":"2026.10.01"},
+ {"id":"B2_v85_original_FY","expert":"Aurum_Imperium_Apex_v8.5_Quant.ex5","base_ini":"configs/v80_london_lock120_risk095.ini","from":"2025.10.01","to":"2026.10.01","overrides":{"LockAnyGreenDay":"true","StreakLossTrigger":"2","StreakReductionRatio":"0.70","MaxAllowedLotSize":"0.25"}}
+]
