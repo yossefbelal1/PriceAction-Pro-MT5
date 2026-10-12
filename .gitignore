@@ -1,26 +1,23 @@
-# OS Junk
-Thumbs.db
-desktop.ini
-.DS_Store
-
-# Logs & Temp files
+# Logs & temporary files
 *.log
 *.tmp
-*.temp
+*.bak
 *.cache
 *.swp
-*.bak
 
-# Python & Dev Artifacts
+# OS Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE & Editor folders
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Python bytecode & cache
 __pycache__/
 *.py[cod]
 *$py.class
-scratch/
-
-# MetaTrader temporary data & caches
-*.tst
-*.opt
-*.mtd
-*.cl
-Tester/
-terminal.log
