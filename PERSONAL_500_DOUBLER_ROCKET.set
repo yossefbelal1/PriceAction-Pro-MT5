@@ -1,0 +1,124 @@
+; =====================================================================
+; PERSONAL_500_DOUBLER_ROCKET.set
+; Strategy: PropFirm Titan US30 Supreme (Personal High-Growth Doubler)
+; Target: Doubling 500$ -> 1000$ -> 2000$ in 1-2 Months Stably
+; Execution: 100% Real Ticks | Real Delay | Multi-Regime Calibrated
+; =====================================================================
+
+; --- Direction & Orientation ---
+TradeDirection=0
+
+; --- Lot Sizing & Balanced Aggressive Risk ---
+LotCalcMode=0
+FixedLotSize=0.10
+RiskPercent=9.00
+MaxDailyRiskPercent=15.00
+MaxDailyProfitPercent=100.00
+MaxPositions=1
+MaxDailyTrades=1
+MaxDailyLosses=1
+UseDrawdownBrake=false
+BrakeTriggerDD=2.50
+
+; --- Safety Controls ---
+UseSafetyBelt=false
+MaxAllowedDailyDD=25.00
+MaxAllowedTotalDD=45.00
+AutoCloseOnEmergency=true
+CloseFridayNight=true
+FridayCloseHour=21
+AvoidFridayAfternoon=true
+AvoidMonday=true
+AvoidThursday=true
+AvoidRolloverSpread=true
+UseStreakRiskReducer=true
+
+; --- Monthly Governance (Uncapped for Personal Growth) ---
+UseMonthlyProfitLock=false
+MonthlyTargetProfitPct=100.00
+MonthlyFloorLockPct=20.00
+HaltTradingOnMonthTarget=false
+UseMonthlyMaxLoss=true
+MaxMonthlyLossPercent=25.00
+MaxMonthlyLossCount=2
+
+; --- Universal Broker Adaptation ---
+AutoBrokerCalibration=true
+UseDynamicSpreadGate=true
+UseDynamicBreakeven=true
+DynamicBEOffsetATRRatio=0.15
+
+; --- Predictive Quality & ATR Gates ---
+UseSpreadToATRGate=true
+MaxSpreadToATRRatio=0.22
+MinATR_Points=20.0
+MaxSpreadPoints=25.0
+ATR_SL_Multiplier=1.15
+ATR_TP_Multiplier=4.20
+
+; --- ICT Strategy Parameters ---
+UseLiquiditySweeps=true
+UseFairValueGaps=true
+LiquidityLookback=40
+FVG_Lookback=20
+FVG_MinSizeATR=0.25
+RequireBothFVGAndSweep=false
+
+; --- Candlestick & Chart Patterns ---
+UseChartPatterns=false
+UseRejectionPinBar=true
+UseEngulfingBar=true
+UseStructureShift=true
+FilterMomentumKnives=true
+
+; --- Session Settings ---
+TradeAsianSession=false
+TradeLondonSession=false
+TradeNewYorkSession=true
+LondonStartHour=7
+NewYorkStartHour=14
+
+; --- Silver Bullet Windows ---
+UseSilverBullet=true
+LondonSilverBullet=false
+LondonKillZoneStart=9
+LondonKillZoneStartMin=30
+LondonKillZoneEnd=11
+LondonKillZoneEndMin=0
+NewYorkSilverBullet=true
+NYKillZoneStart=14
+NYKillZoneStartMin=30
+NYKillZoneEnd=16
+NYKillZoneEndMin=30
+
+; --- Position Management (Variant B Wide Breathing Room) ---
+UseBreakEven=true
+BE_TriggerATR=1.80
+BE_OffsetPoints=50
+UseTrailingStop=false
+UseStructuralTrailing=false
+Trail_StartATR=2.00
+Trail_StepATR=0.85
+UsePartialClose=true
+PartialClosePercent=50.0
+PartialCloseTriggerATR=1.15
+
+; --- Bias Confluence ---
+BiasFastTimeframe=16385
+BiasFastPeriod=34
+BiasSlowTimeframe=16388
+BiasSlowPeriod=200
+UseMacroTrendFilter=true
+MacroTrendPeriod=50
+
+; --- Regime & Execution ---
+UseAdaptiveRegime=false
+HighVolATR_Points=30.0
+HighVolMaxTriggerPoints=30.0
+HighVolBEOffsetATR=0.20
+HighVolTrailStepATR=0.95
+MagicNumber=778811
+SlippagePoints=10
+OrderRetryCount=3
+OrderRetryDelayMs=250
+MinBarsBetweenTrades=6
