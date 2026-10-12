@@ -39,7 +39,7 @@ MaxDailyProfitPercent=10.00
 MaxPositions=1
 MaxDailyTrades=1
 MaxDailyLosses=1
-UseDrawdownBrake=true
+UseDrawdownBrake=false
 BrakeTriggerDD=2.50
 
 ; --- Ironclad Safety Belt ---
@@ -61,8 +61,8 @@ MonthlyTargetProfitPct=1.20
 MonthlyFloorLockPct=0.35
 HaltTradingOnMonthTarget=true
 UseMonthlyMaxLoss=true
-MaxMonthlyLossPercent=2.00
-MaxMonthlyLossCount=1
+MaxMonthlyLossPercent=4.50
+MaxMonthlyLossCount=2
 
 ; --- Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ---
 AutoBrokerCalibration=true
