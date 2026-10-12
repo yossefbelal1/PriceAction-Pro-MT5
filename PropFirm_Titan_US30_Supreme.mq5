@@ -117,8 +117,8 @@ input int    NYKillZoneEndMin       = 30;       // NY Kill Zone End Minute (0-59
 
 input group "=== Position Management (Smart Structural Tracking) ==="
 input bool   UseBreakEven           = true;     // Enable Break Even
-input double BE_TriggerATR          = 1.20;     // BE Trigger distance (1.20 ATR)
-input int    BE_OffsetPoints        = 90;       // BE Offset in points (locks guaranteed profit)
+input double BE_TriggerATR          = 1.80;     // BE Trigger distance (1.80 ATR - lets runners breathe into full TP)
+input int    BE_OffsetPoints        = 50;       // BE Offset in points (50 pts breathing buffer)
 input bool   UseTrailingStop        = false;    // Enable Trailing Stop
 input bool   UseStructuralTrailing  = false;    // Trail behind M5 Swing High/Low Structure
 input double Trail_StartATR         = 2.0;      // Start Trailing distance (x ATR)
