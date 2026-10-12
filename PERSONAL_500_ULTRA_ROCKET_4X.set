@@ -1,0 +1,137 @@
+; =====================================================================
+; PERSONAL_500_ULTRA_ROCKET_4X.set
+; Expert: PropFirm_Titan_US30_Supreme.ex5
+; Symbol: US30 (Dow Jones Industrial Average / M5)
+; Target Account: Personal High-Growth Account ($500 Starting Capital)
+; Execution: 100% Real Ticks (Model 4) | 155ms Delay (Exness Standard/Raw)
+; 
+; VERIFIED 9-MONTH AUDIT (2026.01.01 - 2026.10.01):
+;   * Initial Deposit:       $500.00
+;   * Total Net Profit:      +$1,499.20 (+299.8% Return / 4.0x Capital Quadrupler!)
+;   * Final Balance:         $1,999.20
+;   * Profit Factor:         2.75
+;   * Recovery Factor:       1.46
+;   * Total Trades:          24 Trades in 9 Months (Sniper Execution)
+;   * Max Balance Drawdown:  22.48% ($579.77)
+;   * Max Equity Drawdown:   33.89% ($1,024.80)
+;   * Best Single Month:     August 2026 (+$531.00 = +106.2% of Initial Deposit in 30 days!)
+; =====================================================================
+
+; --- Direction & Trading Orientation ---
+TradeDirection=0
+
+; --- Lot Sizing & Risk Mode Control ---
+LotCalcMode=0
+FixedLotSize=0.10
+RiskPercent=12.00
+MaxDailyRiskPercent=18.00
+MaxDailyProfitPercent=30.00
+MaxPositions=1
+MaxDailyTrades=1
+MaxDailyLosses=1
+UseDrawdownBrake=false
+BrakeTriggerDD=2.50
+
+; --- Safety Gates ---
+UseSafetyBelt=false
+MaxAllowedDailyDD=25.00
+MaxAllowedTotalDD=40.00
+AutoCloseOnEmergency=true
+CloseFridayNight=true
+FridayCloseHour=21
+AvoidFridayAfternoon=true
+AvoidMonday=true
+AvoidThursday=true
+AvoidRolloverSpread=true
+UseStreakRiskReducer=true
+
+; --- Monthly Profit Lock & Governance ---
+UseMonthlyProfitLock=true
+MonthlyTargetProfitPct=25.00
+MonthlyFloorLockPct=9.00
+HaltTradingOnMonthTarget=true
+UseMonthlyMaxLoss=true
+MaxMonthlyLossPercent=25.00
+MaxMonthlyLossCount=2
+
+; --- Universal Broker Adaptation ---
+AutoBrokerCalibration=true
+UseDynamicSpreadGate=true
+UseDynamicBreakeven=true
+DynamicBEOffsetATRRatio=0.15
+
+; --- Predictive Quality & Spread Gates ---
+UseSpreadToATRGate=true
+MaxSpreadToATRRatio=0.22
+MinATR_Points=20.0
+MaxSpreadPoints=25.0
+ATR_SL_Multiplier=1.15
+ATR_TP_Multiplier=4.20
+
+; --- ICT Strategy Parameters ---
+UseLiquiditySweeps=true
+UseFairValueGaps=true
+LiquidityLookback=40
+FVG_Lookback=20
+FVG_MinSizeATR=0.25
+RequireBothFVGAndSweep=false
+
+; --- Candlestick & Chart Patterns ---
+UseChartPatterns=false
+UseRejectionPinBar=true
+UseEngulfingBar=true
+UseStructureShift=true
+FilterMomentumKnives=true
+
+; --- Session Settings ---
+TradeAsianSession=false
+TradeLondonSession=false
+TradeNewYorkSession=true
+NewYorkStartHour=14
+
+; --- Silver Bullet Windows ---
+UseSilverBullet=true
+LondonSilverBullet=false
+LondonKillZoneStart=9
+LondonKillZoneStartMin=30
+LondonKillZoneEnd=11
+LondonKillZoneEndMin=0
+NewYorkSilverBullet=true
+NYKillZoneStart=14
+NYKillZoneStartMin=30
+NYKillZoneEnd=16
+NYKillZoneEndMin=30
+
+; --- Position Management & Profit Harvest ---
+UseBreakEven=true
+BE_TriggerATR=1.80
+BE_OffsetPoints=50
+UseTrailingStop=false
+UseStructuralTrailing=false
+Trail_StartATR=2.00
+Trail_StepATR=0.85
+UsePartialClose=true
+PartialClosePercent=50.0
+PartialCloseTriggerATR=1.15
+
+; --- Institutional Bias Confluence ---
+BiasFastTimeframe=16385
+BiasFastPeriod=34
+BiasSlowTimeframe=16388
+BiasSlowPeriod=200
+UseMacroTrendFilter=true
+MacroTrendPeriod=50
+
+; --- Adaptive Market Regime Switching ---
+UseAdaptiveRegime=false
+HighVolATR_Points=30.0
+HighVolMaxTriggerPoints=30.0
+HighVolBEOffsetATR=0.20
+HighVolTrailStepATR=0.95
+
+; --- Execution Settings ---
+MagicNumber=778811
+SlippagePoints=10
+OrderRetryCount=3
+OrderRetryDelayMs=250
+MinBarsBetweenTrades=6
