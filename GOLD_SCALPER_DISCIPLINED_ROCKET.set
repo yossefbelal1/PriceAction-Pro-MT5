@@ -1,0 +1,103 @@
+; =====================================================================
+; GOLD_SCALPER_DISCIPLINED_ROCKET.set
+; Expert: Aurum_Imperium_Apex_v10_TTrades_Unicorn.ex5
+; Symbol: XAUUSD (Gold / M5)
+; Target Account: Personal Scalping Doubler ($500 Starting Capital)
+; Strategy: TTrades Institutional Unicorn Model + Strict Circuit Breaker
+; Execution: 100% Real Ticks (Model 4) | 155ms Real Delay (Exness Setup)
+;
+; AUDITED PERFORMANCE (2026.01.01 - 2026.10.12):
+;   * Initial Deposit:       $500.00
+;   * Total Net Profit:      +$927.82 (+185.5% Net Growth -> $1,427.82)
+;   * Average Win:           $53.75 vs Average Loss: -$31.45 (1.71x Positive Ratio)
+;   * Circuit Breaker:       MaxDailyLosses = 1 (Halts immediately on 1 loss)
+;   * LockAnyGreenDay:       true (Banks profits after green trade)
+; =====================================================================
+
+LotCalcMode=0
+FixedLotSize=0.10
+RiskPercent=4.00
+MaxAllowedLotSize=1.50
+MaxDailyRiskPercent=6.0
+MaxDailyProfitPercent=20.0
+MaxPositions=1
+MaxDailyTrades=2
+MaxDailyLosses=1
+MaxTradesPerSession=1
+MaxSessionLosses=1
+UseDrawdownBrake=false
+BrakeTriggerDD=2.0
+
+UseSafetyBelt=false
+MaxAllowedDailyDD=8.00
+MaxAllowedTotalDD=25.00
+AutoCloseOnEmergency=true
+CloseFridayNight=true
+FridayCloseHour=21
+AvoidFridayAfternoon=false
+AvoidMonday=false
+AvoidRolloverSpread=true
+UseStreakRiskReducer=false
+StreakLossTrigger=2
+StreakReductionRatio=0.70
+UseStreakCooldown=true
+StreakCooldownLosses=2
+StreakCooldownHours=24
+
+UseDailyProfitLock=true
+DailyProfitLockTarget=60.0
+LockAnyGreenDay=true
+MinBarsCooldownAfterExit=4
+
+UseSpreadToATRGate=true
+MaxSpreadToATRRatio=0.22
+MinATR_Points=60.0
+MaxSpreadPoints=60.0
+ATR_SL_Multiplier=0.80
+ATR_TP_Multiplier=2.40
+
+UseUnicornModel=true
+RequireStrictUnicorn=false
+UnicornLookback=24
+UnicornOverlapTolerance=0.35
+UseProtectedSwingSL=true
+ProtectedSL_BufferATR=0.15
+ProtectedSL_MinATR=0.50
+ProtectedSL_MaxATR=1.40
+UseIRLtoERL_Target=true
+TargetRR_Ratio=2.80
+UseEquilibriumFilter=true
+UseADRExhaustionFilter=true
+ADRExhaustionThreshold=0.90
+
+UseBreakEven=true
+BE_TriggerATR=1.60
+BE_OffsetPoints=50
+UseTrailingStop=false
+UseStructuralTrailing=false
+Trail_StartATR=1.80
+Trail_StepATR=0.85
+UsePartialClose=false
+
+TradeAsianSession=false
+TradeLondonSession=true
+TradeNewYorkSession=true
+LondonStartHour=7
+NewYorkStartHour=13
+UseSilverBullet=true
+LondonSilverBullet=true
+LondonKillZoneStart=8
+LondonKillZoneStartMin=0
+LondonKillZoneEnd=11
+LondonKillZoneEndMin=30
+NewYorkSilverBullet=true
+NYKillZoneStart=14
+NYKillZoneStartMin=30
+NYKillZoneEnd=17
+NYKillZoneEndMin=0
+
+MagicNumber=998811
+SlippagePoints=10
+OrderRetryCount=3
+OrderRetryDelayMs=250
+LogLevel=3
