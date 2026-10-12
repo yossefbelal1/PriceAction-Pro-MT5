@@ -35,14 +35,14 @@ input ENUM_TRADE_DIRECTION TradeDirection = TRADE_DIR_BOTH; // Trading Direction
 input group "=== Lot Sizing & Risk Mode Control (التحكم في اللوت والمخاطرة) ==="
 input ENUM_LOT_CALC_MODE LotCalcMode       = LOT_CALC_PERCENT_RISK; // Lot Mode: Risk % OR Fixed Lot
 input double             FixedLotSize      = 0.10;                  // Fixed Lot Size (if LotCalcMode = Fixed Lot)
-input double             RiskPercent       = 1.00;                  // Risk % per trade (Calibrated strictly to 1.0%)
+input double             RiskPercent       = 2.20;                  // Risk % per trade (Calibrated strictly to 2.20%)
 input double             MaxDailyRiskPercent    = 3.0;              // Daily Loss Limit (% of Day Start Balance)
 input double             MaxDailyProfitPercent  = 10.0;             // Daily profit target (%)
 input int                MaxPositions           = 1;                // Maximum concurrent positions (1 eliminates double losses)
-input int                MaxDailyTrades         = 10;               // Maximum trades per day (Full session exploitation)
-input int                MaxDailyLosses         = 2;                // Circuit Breaker: Max losing trades per day before halt
-input bool               UseDrawdownBrake       = true;             // Smart Drawdown Brake (Protects Prop Firm accounts)
-input double             BrakeTriggerDD         = 2.00;             // Drawdown % threshold to cut risk in half
+input int                MaxDailyTrades         = 1;                // Maximum trades per day (Sniper mode)
+input int                MaxDailyLosses         = 1;                // Circuit Breaker: Max losing trades per day before halt
+input bool               UseDrawdownBrake       = false;            // Drawdown Brake (Disabled to avoid micro-lot choke trap)
+input double             BrakeTriggerDD         = 2.50;             // Drawdown % threshold to cut risk in half
 
 input group "=== Ironclad Safety Belt (حزام أمان الحسابات الممولة الصارم) ==="
 input bool   UseSafetyBelt          = false;    // Master Safety Belt Switch (false for unchoked performance)
@@ -52,19 +52,19 @@ input bool   AutoCloseOnEmergency   = true;     // Force-close open trades immed
 input bool   CloseFridayNight       = true;     // Close all positions before weekend to prevent gap risk
 input int    FridayCloseHour        = 21;       // Friday close hour (Broker time, 21:00)
 input bool   AvoidFridayAfternoon   = true;     // Avoid entering new trades on Friday after 12:00
-input bool   AvoidMonday            = false;    // Avoid trading on Monday
-input bool   AvoidThursday          = false;    // Avoid trading on Thursday (Eliminates post-Fed whipsaws)
+input bool   AvoidMonday            = true;     // Avoid trading on Monday
+input bool   AvoidThursday          = true;     // Avoid trading on Thursday (Eliminates post-Fed whipsaws)
 input bool   AvoidRolloverSpread    = true;     // Avoid trading & trailing during midnight spread widening (23:45-00:15)
 input bool   UseStreakRiskReducer   = true;     // Reduce risk by 50% after 2 consecutive losses
 
 input group "=== Monthly Prop Firm Profit Lock & Risk Governance (حماية الأرباح الشهرية) ==="
-input bool   UseMonthlyProfitLock     = false;   // Enable Monthly Profit Lock (Secures Green Months)
-input double MonthlyTargetProfitPct   = 0.75;    // Target Monthly Profit % (e.g. 0.75% = $75 on $10k)
-input double MonthlyFloorLockPct      = 0.15;    // Floor Profit % to protect once target reached (e.g. +$15)
-input bool   HaltTradingOnMonthTarget = false;   // Halt new entries for the rest of month once target reached
-input bool   UseMonthlyMaxLoss        = false;   // Monthly Circuit Breaker (Max Loss % per calendar month)
-input double MaxMonthlyLossPercent    = 1.50;    // Max loss allowed in any single calendar month (e.g. 1.5%)
-input int    MaxMonthlyLossCount      = 2;       // Max losing trades allowed per month before halting
+input bool   UseMonthlyProfitLock     = true;     // Enable Monthly Profit Lock (Secures Green Months)
+input double MonthlyTargetProfitPct   = 1.20;     // Target Monthly Profit % (e.g. 1.20% = $120 on $10k)
+input double MonthlyFloorLockPct      = 0.35;     // Floor Profit % to protect once target reached (e.g. +$35)
+input bool   HaltTradingOnMonthTarget = true;     // Halt new entries for the rest of month once target reached
+input bool   UseMonthlyMaxLoss        = true;     // Monthly Circuit Breaker (Max Loss % per calendar month)
+input double MaxMonthlyLossPercent    = 4.50;     // Max loss allowed in any single calendar month (e.g. 4.5%)
+input int    MaxMonthlyLossCount      = 2;        // Max losing trades allowed per month before halting
 
 input group "=== Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ==="
 input bool   AutoBrokerCalibration      = true;     // Auto-Detect Broker Specifications & Digits (Broker-Agnostic)
@@ -75,10 +75,10 @@ input double DynamicBEOffsetATRRatio    = 0.15;     // Dynamic Breakeven profit 
 input group "=== Predictive Quality & Spread Gates ==="
 input bool   UseSpreadToATRGate     = true;     // Spread-to-ATR Predictive Quality Gate (Blocks toxic broker spread expansion)
 input double MaxSpreadToATRRatio    = 0.22;     // Max allowable Spread/ATR ratio (spread must not exceed 22% of ATR)
-input double MinATR_Points          = 50.0;     // Minimum ATR (in points)
-input double MaxSpreadPoints        = 60.0;     // Maximum allowed spread (in points)
-input double ATR_SL_Multiplier      = 0.95;     // Stop Loss ATR multiplier (Champion 0.95 ATR)
-input double ATR_TP_Multiplier      = 4.00;     // Take Profit ATR multiplier (Champion 4.00 ATR High-Payoff)
+input double MinATR_Points          = 20.0;     // Minimum ATR (in points)
+input double MaxSpreadPoints        = 25.0;     // Maximum allowed spread (in points)
+input double ATR_SL_Multiplier      = 1.15;     // Stop Loss ATR multiplier (Champion 1.15 ATR)
+input double ATR_TP_Multiplier      = 4.20;     // Take Profit ATR multiplier (Champion 4.20 ATR High-Payoff)
 
 input group "=== ICT Strategy Parameters ==="
 input bool   UseLiquiditySweeps     = true;     // Enable Liquidity Sweeps confirmation
@@ -97,37 +97,37 @@ input bool   FilterMomentumKnives   = true;     // Filter out momentum candles a
 
 input group "=== Session Settings ==="
 input bool   TradeAsianSession      = false;    // Trade Asian session (00-06)
-input bool   TradeLondonSession     = true;     // Trade London session (07-11)
+input bool   TradeLondonSession     = false;    // Trade London session (07-11)
 input bool   TradeNewYorkSession    = true;     // Trade New York session (13:30 - 17:00) FULL DUAL SESSION
 input int    LondonStartHour        = 7;        // London session start hour
-input int    NewYorkStartHour       = 13;       // New York session start hour
+input int    NewYorkStartHour       = 14;       // New York session start hour
 
 input group "=== Silver Bullet Windows ==="
 input bool   UseSilverBullet        = true;     // Restrict entries to Kill Zones
-input bool   LondonSilverBullet     = true;     // London Kill Zone active (Prime Profit Engine)
-input int    LondonKillZoneStart    = 8;        // London Kill Zone Start Hour (Broker Hour: 08)
-input int    LondonKillZoneStartMin = 0;        // London Kill Zone Start Minute (0-59)
-input int    LondonKillZoneEnd      = 11;       // London Kill Zone End Hour (Broker Hour: 11:00 Full 3 Hours!)
+input bool   LondonSilverBullet     = false;    // London Kill Zone active (Prime Profit Engine)
+input int    LondonKillZoneStart    = 9;        // London Kill Zone Start Hour (Broker Hour: 09)
+input int    LondonKillZoneStartMin = 30;       // London Kill Zone Start Minute (0-59)
+input int    LondonKillZoneEnd      = 11;       // London Kill Zone End Hour (Broker Hour: 11:00)
 input int    LondonKillZoneEndMin   = 0;        // London Kill Zone End Minute (0-59)
 input bool   NewYorkSilverBullet    = true;     // New York Kill Zone active (Full Dual Session Engine)
-input int    NYKillZoneStart        = 13;       // NY Kill Zone Start (Broker Hour: 13:30)
+input int    NYKillZoneStart        = 14;       // NY Kill Zone Start (Broker Hour: 14:30)
 input int    NYKillZoneStartMin     = 30;       // NY Kill Zone Start Minute (30)
-input int    NYKillZoneEnd          = 17;       // NY Kill Zone End Hour (17:00 Full 3.5 Hours!)
-input int    NYKillZoneEndMin       = 0;        // NY Kill Zone End Minute (0-59)
+input int    NYKillZoneEnd          = 16;       // NY Kill Zone End Hour (16:30)
+input int    NYKillZoneEndMin       = 30;       // NY Kill Zone End Minute (0-59)
 
 input group "=== Position Management (Smart Structural Tracking) ==="
 input bool   UseBreakEven           = true;     // Enable Break Even
-input double BE_TriggerATR          = 1.00;     // BE Trigger distance (1.00 ATR, fast risk elimination)
-input int    BE_OffsetPoints        = 45;       // BE Offset in points (locks guaranteed profit)
-input bool   UseTrailingStop        = true;     // Enable Trailing Stop
-input bool   UseStructuralTrailing  = true;     // Trail behind M5 Swing High/Low Structure
-input double Trail_StartATR         = 1.5;      // Start Trailing distance (x ATR)
-input double Trail_StepATR          = 0.85;     // Dynamic buffer behind price/structure (x ATR, calibrated for London trend)
-input bool   UseSmartExhaustion     = false;    // Smart early exit (disabled to let runners hit full target)
-input bool   UseSmartLossCutter     = false;    // Smart early loss cut (disabled to prevent premature noise exits)
+input double BE_TriggerATR          = 1.20;     // BE Trigger distance (1.20 ATR)
+input int    BE_OffsetPoints        = 90;       // BE Offset in points (locks guaranteed profit)
+input bool   UseTrailingStop        = false;    // Enable Trailing Stop
+input bool   UseStructuralTrailing  = false;    // Trail behind M5 Swing High/Low Structure
+input double Trail_StartATR         = 2.0;      // Start Trailing distance (x ATR)
+input double Trail_StepATR          = 0.85;     // Dynamic buffer behind price/structure (x ATR)
+input bool   UseSmartExhaustion     = false;    // Smart early exit
+input bool   UseSmartLossCutter     = false;    // Smart early loss cut
 input bool   UsePartialClose        = true;     // Enable Partial Close
-input double PartialClosePercent    = 40.0;     // Partial Close volume (%) - leaving 60% on runner
-input double PartialCloseTriggerATR = 1.15;     // Partial Close Trigger distance (1.15 ATR, rapid profit lock)
+input double PartialClosePercent    = 50.0;     // Partial Close volume (%)
+input double PartialCloseTriggerATR = 1.15;     // Partial Close Trigger distance (1.15 ATR)
 
 input group "=== Institutional Bias Confluence ==="
 input ENUM_TIMEFRAMES BiasFastTimeframe      = PERIOD_H1;  // Fast EMA Timeframe
@@ -138,18 +138,18 @@ input bool             UseMacroTrendFilter    = true;       // Macro Daily Trend
 input int              MacroTrendPeriod       = 50;         // Macro Daily EMA Period
 
 input group "=== Adaptive Market Regime Switching (نظام التكيف الذكي مع حركة الذهب) ==="
-input bool   UseAdaptiveRegime               = true;       // Enable Adaptive Market Regime Switch
-input double HighVolATR_Points               = 150.0;      // High Volatility Threshold (Points)
-input double HighVolMaxTriggerPoints         = 120.0;      // Max Partial/BE Trigger distance in High Vol
+input bool   UseAdaptiveRegime               = false;      // Enable Adaptive Market Regime Switch
+input double HighVolATR_Points               = 30.0;       // High Volatility Threshold (Points)
+input double HighVolMaxTriggerPoints         = 30.0;       // Max Partial/BE Trigger distance in High Vol
 input double HighVolBEOffsetATR              = 0.20;       // Dynamic BE Offset in High Vol (x ATR breathing room)
 input double HighVolTrailStepATR             = 0.95;       // Dynamic Trail Step in High Vol (prevents noise stopout)
 
-
 input group "=== Execution Settings ==="
-input ulong  MagicNumber            = 108821;   // Magic Number
+input ulong  MagicNumber            = 778811;   // Magic Number
 input int    SlippagePoints         = 10;       // Slippage in points
 input int    OrderRetryCount        = 3;        // Order Retry attempts
 input int    OrderRetryDelayMs      = 250;      // Delay between retries (ms)
+input int    MinBarsBetweenTrades   = 6;        // Minimum bars between trades
 
 enum ENUM_LOG_LEVEL {
    LOG_NONE = 0,
