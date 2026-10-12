@@ -59,12 +59,13 @@ input bool   UseStreakRiskReducer   = true;     // Reduce risk by 50% after 2 co
 
 input group "=== Monthly Prop Firm Profit Lock & Risk Governance (حماية الأرباح الشهرية) ==="
 input bool   UseMonthlyProfitLock     = true;     // Enable Monthly Profit Lock (Secures Green Months)
-input double MonthlyTargetProfitPct   = 1.20;     // Target Monthly Profit % (e.g. 1.20% = $120 on $10k)
+input int    ProfitLockCycleDays      = 0;        // Profit Lock Cycle (0=Monthly, 15=Bi-Weekly 2x/Mo, 10=3x/Mo)
+input double MonthlyTargetProfitPct   = 1.20;     // Target Cycle Profit % (e.g. 1.20% = $120 on $10k)
 input double MonthlyFloorLockPct      = 0.35;     // Floor Profit % to protect once target reached (e.g. +$35)
-input bool   HaltTradingOnMonthTarget = true;     // Halt new entries for the rest of month once target reached
-input bool   UseMonthlyMaxLoss        = true;     // Monthly Circuit Breaker (Max Loss % per calendar month)
-input double MaxMonthlyLossPercent    = 4.50;     // Max loss allowed in any single calendar month (e.g. 4.5%)
-input int    MaxMonthlyLossCount      = 2;        // Max losing trades allowed per month before halting
+input bool   HaltTradingOnMonthTarget = true;     // Halt new entries for the rest of cycle once target reached
+input bool   UseMonthlyMaxLoss        = true;     // Cycle Circuit Breaker (Max Loss % per cycle)
+input double MaxMonthlyLossPercent    = 4.50;     // Max loss allowed in any single cycle (e.g. 4.5%)
+input int    MaxMonthlyLossCount      = 2;        // Max losing trades allowed per cycle before halting
 
 input group "=== Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ==="
 input bool   AutoBrokerCalibration      = true;     // Auto-Detect Broker Specifications & Digits (Broker-Agnostic)
@@ -215,15 +216,30 @@ private:
    void LogInfo(string msg)    { if(LogLevel >= LOG_INFO)    Print("[INFO] ",  msg); }
    void LogDebug(string msg)   { if(LogLevel >= LOG_DEBUG)   Print("[DEBUG] ", msg); }
    
+   int GetCurrentCycleBucket(const MqlDateTime &dt) {
+      if(ProfitLockCycleDays == 15) return (dt.day >= 16) ? 2 : 1;
+      if(ProfitLockCycleDays == 10) return (dt.day >= 21) ? 3 : ((dt.day >= 11) ? 2 : 1);
+      if(ProfitLockCycleDays == 7)  return (dt.day >= 22) ? 4 : ((dt.day >= 15) ? 3 : ((dt.day >= 8) ? 2 : 1));
+      return 1;
+   }
+
+   int GetCurrentCycleStartDay(const MqlDateTime &dt) {
+      if(ProfitLockCycleDays == 15) return (dt.day >= 16) ? 16 : 1;
+      if(ProfitLockCycleDays == 10) return (dt.day >= 21) ? 21 : ((dt.day >= 11) ? 11 : 1);
+      if(ProfitLockCycleDays == 7)  return (dt.day >= 22) ? 22 : ((dt.day >= 15) ? 15 : ((dt.day >= 8) ? 8 : 1));
+      return 1;
+   }
+
    void CheckAndResetDay() {
       MqlDateTime dt;
       TimeToStruct(TimeCurrent(), dt);
-      if(dt.mon != m_currentMonth) {
-         m_currentMonth = dt.mon;
+      int cycleKey = dt.mon * 10 + GetCurrentCycleBucket(dt);
+      if(cycleKey != m_currentMonth) {
+         m_currentMonth = cycleKey;
          m_monthTargetReached = false;
          m_monthlyHalted = false;
          m_monthStartBalance = m_account.Balance();
-         LogInfo(StringFormat("New trading month initialized: Month %d. Start Balance: %.2f", m_currentMonth, m_monthStartBalance));
+         LogInfo(StringFormat("New trading cycle initialized: Cycle %d. Start Balance: %.2f", m_currentMonth, m_monthStartBalance));
       }
       if(dt.day != m_currentDay) {
          m_currentDay = dt.day;
@@ -389,7 +405,7 @@ private:
    double GetMonthNetProfit() {
       MqlDateTime dt;
       TimeToStruct(TimeCurrent(), dt);
-      dt.day = 1; dt.hour = 0; dt.min = 0; dt.sec = 0;
+      dt.day = GetCurrentCycleStartDay(dt); dt.hour = 0; dt.min = 0; dt.sec = 0;
       datetime startOfMonth = StructToTime(dt);
       
       if(!HistorySelect(startOfMonth, TimeCurrent())) return 0.0;
@@ -412,7 +428,7 @@ private:
    int GetMonthLossCount() {
       MqlDateTime dt;
       TimeToStruct(TimeCurrent(), dt);
-      dt.day = 1; dt.hour = 0; dt.min = 0; dt.sec = 0;
+      dt.day = GetCurrentCycleStartDay(dt); dt.hour = 0; dt.min = 0; dt.sec = 0;
       datetime startOfMonth = StructToTime(dt);
       
       if(!HistorySelect(startOfMonth, TimeCurrent())) return 0;
@@ -868,6 +884,18 @@ private:
       
       double rawLot = riskAmount / lossPerLot;
       double normalized = MathFloor(rawLot / step) * step;
+      
+      double marginOneLot = 0.0;
+      double askPrice = m_symbol.Ask();
+      if(askPrice <= 0) askPrice = iClose(_Symbol, PERIOD_M5, 0);
+      if(OrderCalcMargin(ORDER_TYPE_BUY, _Symbol, 1.0, askPrice, marginOneLot) && marginOneLot > 0.0) {
+         double freeMargin = m_account.FreeMargin();
+         double maxMarginLot = MathFloor(((freeMargin * 0.85) / marginOneLot) / step) * step;
+         if(normalized > maxMarginLot && maxMarginLot >= minLot) {
+            normalized = maxMarginLot;
+         }
+      }
+      
       if(normalized < minLot) normalized = minLot;
       if(normalized > maxLot) normalized = maxLot;
       
