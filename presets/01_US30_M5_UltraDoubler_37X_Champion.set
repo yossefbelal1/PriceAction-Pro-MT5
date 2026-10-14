@@ -57,7 +57,7 @@ UseStreakRiskReducer=true
 
 ; --- Monthly Prop Firm Profit Lock & Risk Governance ---
 UseMonthlyProfitLock=true
-MonthlyTargetProfitPct=10.00
+MonthlyTargetProfitPct=5.50
 MonthlyFloorLockPct=2.50
 HaltTradingOnMonthTarget=true
 UseMonthlyMaxLoss=true
@@ -75,7 +75,7 @@ UseSpreadToATRGate=true
 MaxSpreadToATRRatio=0.22
 MinATR_Points=20.0
 MaxSpreadPoints=25.0
-ATR_SL_Multiplier=1.15
+ATR_SL_Multiplier=1.30
 ATR_TP_Multiplier=3.50
 
 ; --- ICT Strategy Parameters ---
