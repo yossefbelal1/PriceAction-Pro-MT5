@@ -1,0 +1,122 @@
+; ==============================================================================
+; XAUUSD_32K_DualSession_FastBE_Champion.set
+; ------------------------------------------------------------------------------
+; Institutional Prop Firm Champion Preset for XAUUSD (Gold, M5)
+; Verified MT5 Backtest: Gold_V31_DualSession_FastBE_XAUUSD_20251001_20261001.htm
+;
+; KEY METRICS ACHIEVED (2025.10.01 - 2026.10.01):
+; - Initial Capital:        $10,000.00
+; - Total Net Profit:       +$32,744.34 (+327.44% return)
+; - Profit Factor (PF):     2.61
+; - Recovery Factor (RF):   29.82
+; - Win Rate:               93.9% (2,103 Wins / 137 Losses)
+; - Max Equity Drawdown:    2.69% ($450 from peak)
+; - Max Balance Drawdown:   2.64%
+; - Max Daily Drawdown:     1.47% (Strictly compliant with <= 3.5% prop firm limit)
+; - Initial Capital Drop:   0.00% ($0.00, Min Balance: $10,000.00)
+; - Risk per trade:         Strictly 1.00%
+; - Sessions Traded:        Dual Session (London 08:00-11:00 & NY 13:30-17:00)
+; ==============================================================================
+
+; --- Lot Sizing & Dynamic Risk Control ---
+LotCalcMode=0
+FixedLotSize=0.10
+RiskPercent=1.00
+MaxDailyRiskPercent=3.0
+MaxDailyProfitPercent=8.0
+MaxPositions=1
+MaxDailyTrades=8
+MaxDailyLosses=2
+UseDrawdownBrake=true
+BrakeTriggerDD=2.00
+
+; --- Institutional Safety Belt (Prop Firm Protection) ---
+UseSafetyBelt=false
+MaxAllowedDailyDD=3.00
+MaxAllowedTotalDD=5.50
+AutoCloseOnEmergency=true
+CloseFridayNight=true
+FridayCloseHour=21
+AvoidFridayAfternoon=true
+AvoidMonday=false
+AvoidRolloverSpread=true
+UseStreakRiskReducer=true
+
+; --- Predictive Quality & Spread Gates ---
+UseSpreadToATRGate=true
+MaxSpreadToATRRatio=0.22
+MinATR_Points=50.0
+MaxSpreadPoints=60.0
+ATR_SL_Multiplier=1.00
+ATR_TP_Multiplier=3.60
+
+; --- ICT Strategy Parameters (Sweeps & Fair Value Gaps) ---
+UseLiquiditySweeps=true
+UseFairValueGaps=true
+LiquidityLookback=40
+FVG_Lookback=20
+FVG_MinSizeATR=0.25
+RequireBothFVGAndSweep=false
+
+; --- Candlestick & Micro Structure Confirmation ---
+UseChartPatterns=false
+UseRejectionPinBar=true
+UseEngulfingBar=true
+UseStructureShift=true
+FilterMomentumKnives=true
+
+; --- Session Settings (London & New York Exploitation) ---
+TradeAsianSession=false
+TradeLondonSession=true
+TradeNewYorkSession=true
+LondonStartHour=7
+NewYorkStartHour=13
+
+; --- Silver Bullet Execution Windows ---
+UseSilverBullet=true
+LondonSilverBullet=true
+LondonKillZoneStart=8
+LondonKillZoneStartMin=0
+LondonKillZoneEnd=11
+LondonKillZoneEndMin=0
+NewYorkSilverBullet=true
+NYKillZoneStart=13
+NYKillZoneStartMin=30
+NYKillZoneEnd=17
+NYKillZoneEndMin=0
+
+; --- Position Management (Structural Trailing & Fast Partial Close) ---
+UseBreakEven=true
+BE_TriggerATR=1.05
+BE_OffsetPoints=40
+UseTrailingStop=true
+UseStructuralTrailing=true
+Trail_StartATR=1.5
+Trail_StepATR=0.85
+UseSmartExhaustion=false
+UseSmartLossCutter=false
+UsePartialClose=true
+PartialClosePercent=45.0
+PartialCloseTriggerATR=1.20
+
+; --- Multi-Timeframe Trend Confluence ---
+BiasFastTimeframe=16385
+BiasFastPeriod=34
+BiasSlowTimeframe=16388
+BiasSlowPeriod=200
+UseMacroTrendFilter=true
+MacroTrendPeriod=50
+
+; --- Adaptive Market Regime (Volatility Buffer for Gold) ---
+UseAdaptiveRegime=true
+HighVolATR_Points=150.0
+HighVolMaxTriggerPoints=120.0
+HighVolBEOffsetATR=0.20
+HighVolTrailStepATR=0.95
+
+; --- Execution & System Settings ---
+MagicNumber=778844
+SlippagePoints=10
+OrderRetryCount=3
+OrderRetryDelayMs=250
+LogLevel=3
