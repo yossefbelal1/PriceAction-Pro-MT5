@@ -1,0 +1,152 @@
+; =====================================================================
+; 02_US30_M1_Swarm_Doubler_Aggressive.set
+; Dedicated for Aggressive Account Growth / High-Risk Doubler
+; Symbol: US30 | Timeframe: M1
+; Execution: 100% Real Ticks (Model 4) | 155ms Real Delay
+; Strict Risk Governance:
+;   - Hard Daily Floating Equity Loss Limit: <= 5.00%
+;   - Hard Cycle Floating Loss Limit: <= 10.00%
+;   - Base Principal Risk: 3.50%
+;   - Smart Anti-Martingale Profit Shield: Scaled Compounding from closed profit
+;   - Minimum Margin Level: 300.00%
+;   - Multi-Tranche Execution: Max 2 tranches (Fast TP + Runner TP)
+; =====================================================================
+
+TradeDirection=0
+
+; --- Lot Sizing & Smart Profit Compounding ---
+LotCalcMode=0
+FixedLotSize=0.10
+BaseRiskPercent=3.50
+RiskPercent=3.50
+UseSmartProfitCompounding=true
+ProfitShieldMaxRiskPct=40.00
+MaxCompoundedRiskPct=10.00
+MaxDailyRiskPercent=5.00
+MaxDailyProfitPercent=35.00
+MaxPositions=1
+MaxDailyTrades=3
+MaxDailyLosses=2
+UseDrawdownBrake=true
+BrakeTriggerDD=3.00
+
+; --- Ironclad Safety Belt & Margin Guard ---
+UseSafetyBelt=true
+MaxAllowedDailyDD=5.00
+MaxAllowedTotalDD=10.00
+MinAllowedMarginLevel=300.00
+AutoCloseOnEmergency=true
+CloseFridayNight=true
+FridayCloseHour=21
+AvoidFridayAfternoon=true
+AvoidMonday=false
+AvoidThursday=false
+AvoidRolloverSpread=true
+UseStreakRiskReducer=true
+
+; --- Bi-Weekly Cycle Profit Lock & Governance ---
+UseMonthlyProfitLock=true
+ProfitLockCycleDays=15
+MonthlyTargetProfitPct=35.00
+Cycle2TargetRatio=1.00
+MonthlyFloorLockPct=8.00
+HaltTradingOnMonthTarget=true
+UseMonthlyMaxLoss=true
+MaxMonthlyLossPercent=8.00
+MaxMonthlyLossCount=4
+UseProfitShield=true
+
+; --- Universal Broker Adaptation ---
+AutoBrokerCalibration=true
+UseDynamicSpreadGate=true
+UseDynamicBreakeven=true
+DynamicBEOffsetATRRatio=0.80
+
+; --- Predictive Quality & Spread Gates ---
+UseSpreadToATRGate=true
+MaxSpreadToATRRatio=0.22
+MinATR_Points=20.0
+MaxSpreadPoints=25.0
+ATR_SL_Multiplier=1.15
+ATR_TP_Multiplier=3.50
+
+; --- ICT Strategy Parameters ---
+UseLiquiditySweeps=true
+UseFairValueGaps=true
+LiquidityLookback=40
+FVG_Lookback=20
+FVG_MinSizeATR=0.25
+RequireBothFVGAndSweep=false
+
+; --- Candlestick & Chart Patterns ---
+UseChartPatterns=false
+UseRejectionPinBar=true
+UseEngulfingBar=true
+UseStructureShift=true
+FilterMomentumKnives=true
+
+; --- Session Settings ---
+TradeAsianSession=false
+TradeLondonSession=false
+TradeNewYorkSession=true
+LondonStartHour=9
+NewYorkStartHour=14
+
+; --- Silver Bullet Windows ---
+UseSilverBullet=true
+LondonSilverBullet=false
+LondonKillZoneStart=9
+LondonKillZoneStartMin=30
+LondonKillZoneEnd=11
+LondonKillZoneEndMin=30
+NewYorkSilverBullet=true
+NYKillZoneStart=14
+NYKillZoneStartMin=30
+NYKillZoneEnd=16
+NYKillZoneEndMin=30
+
+; --- Position Management & Profit Harvest ---
+UseBreakEven=true
+BE_TriggerATR=1.05
+BE_OffsetPoints=50
+UseStructuralTrailing=false
+Trail_StartATR=2.00
+Trail_StepATR=0.85
+UsePartialClose=false
+PartialClosePercent=50.0
+PartialCloseTriggerATR=1.15
+
+; --- Institutional Bias Confluence ---
+BiasFastTimeframe=16385
+BiasFastPeriod=34
+BiasSlowTimeframe=16388
+BiasSlowPeriod=200
+UseMacroTrendFilter=true
+MacroTrendPeriod=50
+
+; --- Adaptive Market Regime Switching ---
+UseAdaptiveRegime=false
+
+; --- Multi-Tranche Execution (Max 2 Tranches) ---
+MagicNumber=778811
+SlippagePoints=10
+OrderRetryCount=3
+OrderRetryDelayMs=250
+MinBarsBetweenTrades=5
+UseM1BarEntryTiming=false
+UseM1MicroSwarm=true
+SwarmTranchesPerWave=2
+SwarmFastTranchePct=50
+SwarmFastTP_MinATR=0.95
+SwarmFastTP_MaxATR=1.15
+SwarmRunnerTP_MinATR=2.50
+SwarmRunnerTP_MaxATR=3.50
+UseAsyncSwarmExecution=true
+UseStagedSwarmScaleIn=false
+UseMilestoneRatchet=true
+Stage15_TriggerATR=1.35
+Stage15_OffsetATR=1.15
+Stage2_TriggerATR=1.80
+Stage2_OffsetATR=1.55
+Stage3_TriggerATR=2.50
+Stage3_OffsetATR=2.10

@@ -32,43 +32,47 @@ enum ENUM_TRADE_DIRECTION {
 input group "=== Direction & Trading Orientation (فلتر الاتجاه العام) ==="
 input ENUM_TRADE_DIRECTION TradeDirection = TRADE_DIR_BOTH; // Trading Direction Mode (0: Both, 1: Buy Only, 2: Sell Only)
 
-input group "=== Lot Sizing & Risk Mode Control (التحكم في اللوت والمخاطرة) ==="
+input group "=== Lot Sizing & Smart Profit Compounding (التحكم الذكي في المخاطرة والتراكم) ==="
 input ENUM_LOT_CALC_MODE LotCalcMode       = LOT_CALC_PERCENT_RISK; // Lot Mode: Risk % OR Fixed Lot
 input double             FixedLotSize      = 0.10;                  // Fixed Lot Size (if LotCalcMode = Fixed Lot)
-input double             RiskPercent       = 2.20;                  // Risk % per trade (Calibrated strictly to 2.20%)
-input double             MaxDailyRiskPercent    = 3.0;              // Daily Loss Limit (% of Day Start Balance)
-input double             MaxDailyProfitPercent  = 10.0;             // Daily profit target (%)
-input int                MaxPositions           = 1;                // Maximum concurrent positions (1 eliminates double losses)
-input int                MaxDailyTrades         = 1;                // Maximum trades per day (Sniper mode)
-input int                MaxDailyLosses         = 1;                // Circuit Breaker: Max losing trades per day before halt
-input bool               UseDrawdownBrake       = false;            // Drawdown Brake (Disabled to avoid micro-lot choke trap)
-input double             BrakeTriggerDD         = 2.50;             // Drawdown % threshold to cut risk in half
+input double             BaseRiskPercent   = 2.50;                  // Base Risk % on initial capital (2.0% - 3.0%)
+input double             RiskPercent       = 2.50;                  // Current Risk % (defaults to BaseRiskPercent)
+input bool               UseSmartProfitCompounding = true;          // Smart Anti-Martingale: Scale risk from accumulated cycle profit only
+input double             ProfitShieldMaxRiskPct   = 35.0;           // Max % of accumulated cycle profit to risk on next trade
+input double             MaxCompoundedRiskPct     = 8.00;           // Hard ceiling on compounded risk % (prevents excessive lot)
+input double             MaxDailyRiskPercent      = 4.0;            // Daily Loss Limit (% of Day Start Balance)
+input double             MaxDailyProfitPercent    = 25.0;           // Daily profit target (%)
+input int                MaxPositions             = 1;              // Maximum concurrent positions
+input int                MaxDailyTrades           = 3;              // Maximum independent setups per day (Active trading)
+input int                MaxDailyLosses           = 2;              // Circuit Breaker: Max losing setups per day before daily halt
+input bool               UseDrawdownBrake         = true;           // Drawdown Brake: Throttle risk if floating DD occurs
+input double             BrakeTriggerDD           = 2.50;           // Drawdown % threshold to cut risk in half
 
-input group "=== Ironclad Safety Belt (حزام أمان الحسابات الممولة الصارم) ==="
-input bool   UseSafetyBelt          = false;    // Master Safety Belt Switch (false for unchoked performance)
-input double MaxAllowedDailyDD      = 3.00;     // Hard Daily Drawdown limit (% of Day Start Balance, Max 3.0%)
-input double MaxAllowedTotalDD      = 5.50;     // Hard Total Drawdown ceiling (% from Initial Deposit, Max 5.5%)
+input group "=== Ironclad Safety Belt & Margin Level Guard (حزام الأمان وحماية الهامش) ==="
+input bool   UseSafetyBelt          = true;     // Master Safety Belt Switch (Mandatory for client protection)
+input double MaxAllowedDailyDD      = 4.00;     // Hard Daily Equity Drawdown limit (% of Day Start Balance, Max 4.0%)
+input double MaxAllowedTotalDD      = 8.00;     // Hard Total Drawdown ceiling (% from Initial Deposit, Max 8.0%)
+input double MinAllowedMarginLevel  = 300.0;    // Margin Level Guard: Min Margin Level % to allow new trade (300%)
 input bool   AutoCloseOnEmergency   = true;     // Force-close open trades immediately if emergency thresholds hit
 input bool   CloseFridayNight       = true;     // Close all positions before weekend to prevent gap risk
 input int    FridayCloseHour        = 21;       // Friday close hour (Broker time, 21:00)
 input bool   AvoidFridayAfternoon   = true;     // Avoid entering new trades on Friday after 12:00
-input bool   AvoidMonday            = true;     // Avoid trading on Monday
-input bool   AvoidThursday          = true;     // Avoid trading on Thursday (Eliminates post-Fed whipsaws)
-input bool   AvoidRolloverSpread    = true;     // Avoid trading & trailing during midnight spread widening (23:45-00:15)
-input bool   UseStreakRiskReducer   = true;     // Reduce risk by 50% after 2 consecutive losses
+input bool   AvoidMonday            = false;    // Trade on Monday (Active weekly distribution)
+input bool   AvoidThursday          = false;    // Trade on Thursday (Active weekly distribution)
+input bool   AvoidRolloverSpread    = true;     // Avoid trading during midnight spread widening (23:45-00:15)
+input bool   UseStreakRiskReducer   = true;     // Reduce risk by 50% after consecutive loss until recovery
 
-input group "=== Monthly Prop Firm Profit Lock & Risk Governance (حماية الأرباح الشهرية) ==="
-input bool   UseMonthlyProfitLock     = true;     // Enable Monthly Profit Lock (Secures Green Months)
-input int    ProfitLockCycleDays      = 0;        // Profit Lock Cycle (0=Monthly, 16=Day 1-16 & 17-31, 15=Bi-Weekly)
-input double MonthlyTargetProfitPct   = 1.20;     // Target Cycle 1 Profit % (e.g. 1.20% = $120 on $10k)
-input double Cycle2TargetRatio        = 0.45;     // Cycle 2+ Target Ratio relative to MonthlyTargetProfitPct
-input double MonthlyFloorLockPct      = 0.35;     // Floor Profit % to protect once target reached (e.g. +$35)
+input group "=== Monthly/Bi-Weekly Profit Lock & Governance (إدارة دورات الأرباح) ==="
+input bool   UseMonthlyProfitLock     = true;     // Enable Cycle Profit Lock (Secures Green Cycles)
+input int    ProfitLockCycleDays      = 15;       // Profit Lock Cycle (15=Bi-Weekly, 0=Monthly)
+input double MonthlyTargetProfitPct   = 25.00;    // Target Cycle Profit % (e.g. 25.0% on $500 = +$125)
+input double Cycle2TargetRatio        = 1.00;     // Cycle 2+ Target Ratio relative to MonthlyTargetProfitPct
+input double MonthlyFloorLockPct      = 5.00;     // Floor Profit % to protect once target reached
 input bool   HaltTradingOnMonthTarget = true;     // Halt new entries for the rest of cycle once target reached
 input bool   UseMonthlyMaxLoss        = true;     // Cycle Circuit Breaker (Max Loss % per cycle)
-input double MaxMonthlyLossPercent    = 4.50;     // Max loss allowed in any single cycle (e.g. 4.5%)
-input int    MaxMonthlyLossCount      = 2;        // Max losing trades allowed per cycle before halting
+input double MaxMonthlyLossPercent    = 8.00;     // Max loss allowed in any single cycle (Strictly 8.0%)
+input int    MaxMonthlyLossCount      = 4;        // Max losing trades allowed per cycle before halting (Flexible)
 input bool   UseProfitShield          = true;     // Profit Shield: Never risk more than accumulated month profit
-input double ProfitShieldMaxRiskPct   = 35.0;     // Max % of accumulated month profit to risk on subsequent waves
 
 input group "=== Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ==="
 input bool   AutoBrokerCalibration      = true;     // Auto-Detect Broker Specifications & Digits (Broker-Agnostic)
@@ -99,20 +103,20 @@ input bool   UseEngulfingBar        = true;     // Momentum Engulfing Pattern
 input bool   UseStructureShift      = true;     // Micro Market Structure Shift (MSS) breakout
 input bool   FilterMomentumKnives   = true;     // Filter out momentum candles against trend (falling knife filter)
 
-input group "=== Session Settings ==="
+input group "=== Session Settings (توزيع التداول عبر لندن ونيويورك) ==="
 input bool   TradeAsianSession      = false;    // Trade Asian session (00-06)
-input bool   TradeLondonSession     = false;    // Trade London session (07-11)
+input bool   TradeLondonSession     = true;     // Trade London session (Active European liquidity)
 input bool   TradeNewYorkSession    = true;     // Trade New York session (13:30 - 17:00) FULL DUAL SESSION
-input int    LondonStartHour        = 7;        // London session start hour
-input int    NewYorkStartHour       = 14;       // New York session start hour
+input int    LondonStartHour        = 9;        // London session start hour (Broker hour 09:00)
+input int    NewYorkStartHour       = 14;       // New York session start hour (Broker hour 14:00)
 
-input group "=== Silver Bullet Windows ==="
+input group "=== Silver Bullet Windows (نوافذ السيولة المؤسسية العالية) ==="
 input bool   UseSilverBullet        = true;     // Restrict entries to Kill Zones
-input bool   LondonSilverBullet     = false;    // London Kill Zone active (Prime Profit Engine)
+input bool   LondonSilverBullet     = true;     // London Kill Zone active (Prime Profit Engine 09:30 - 11:30)
 input int    LondonKillZoneStart    = 9;        // London Kill Zone Start Hour (Broker Hour: 09)
 input int    LondonKillZoneStartMin = 30;       // London Kill Zone Start Minute (0-59)
-input int    LondonKillZoneEnd      = 11;       // London Kill Zone End Hour (Broker Hour: 11:00)
-input int    LondonKillZoneEndMin   = 0;        // London Kill Zone End Minute (0-59)
+input int    LondonKillZoneEnd      = 11;       // London Kill Zone End Hour (Broker Hour: 11:30)
+input int    LondonKillZoneEndMin   = 30;       // London Kill Zone End Minute (0-59)
 input bool   NewYorkSilverBullet    = true;     // New York Kill Zone active (Full Dual Session Engine)
 input int    NYKillZoneStart        = 14;       // NY Kill Zone Start (Broker Hour: 14:30)
 input int    NYKillZoneStartMin     = 30;       // NY Kill Zone Start Minute (30)
@@ -148,15 +152,15 @@ input double HighVolMaxTriggerPoints         = 30.0;       // Max Partial/BE Tri
 input double HighVolBEOffsetATR              = 0.20;       // Dynamic BE Offset in High Vol (x ATR breathing room)
 input double HighVolTrailStepATR             = 0.95;       // Dynamic Trail Step in High Vol (prevents noise stopout)
 
-input group "=== M1 Rapid Micro-Scalp Swarm (نظام السكالبينج المكثف فريم الدقيقة) ==="
-input bool   UseM1MicroSwarm        = false;    // Enable M1 High-Frequency Micro-Scalp Swarm
-input int    SwarmTranchesPerWave   = 12;       // Micro-Scalp trades per wave (splits risk safely across N trades)
-input int    SwarmFastTranchePct    = 50;       // % of Swarm tranches assigned to Fast Scalp TP Ladder
-input double SwarmFastTP_MinATR     = 0.90;     // Fast Scalp Tranches Min TP (x ATR)
-input double SwarmFastTP_MaxATR     = 1.15;     // Fast Scalp Tranches Max TP (x ATR)
+input group "=== Multi-Tranche Scalp Execution (تنفيذ العقود المقسمة المؤسسية - حد أقصى 2-3 عقود) ==="
+input bool   UseM1MicroSwarm        = true;     // Enable Multi-Tranche Scalp Execution (2-3 Tranches Max)
+input int    SwarmTranchesPerWave   = 2;        // Split contracts per setup (STRICTLY capped at 2-3: Fast TP + Runner TP)
+input int    SwarmFastTranchePct    = 50;       // % assigned to Fast Scalp TP
+input double SwarmFastTP_MinATR     = 1.10;     // Fast Scalp Tranches Min TP (x ATR)
+input double SwarmFastTP_MaxATR     = 1.25;     // Fast Scalp Tranches Max TP (x ATR)
 input double SwarmRunnerTP_MinATR   = 2.80;     // Runner Scalp Tranches Min TP (x ATR)
 input double SwarmRunnerTP_MaxATR   = 3.60;     // Runner Scalp Tranches Max TP (x ATR)
-input bool   UseM1BarEntryTiming    = false;    // Allow entry evaluation on every M1 bar
+input bool   UseM1BarEntryTiming    = false;    // Entry timing on bar close
 input double OverallMonthTargetPct  = 0.0;      // Overall Month Profit Target % (0=Disabled, e.g. 100%=Lock 2X)
 input bool   UseAsyncSwarmExecution = true;     // Zero-Latency Async Dispatch (OrderSendAsync for all tranches)
 input bool   UseStagedSwarmScaleIn  = false;    // 3-Tier Staged Scale-In (Probe + Discount Dip / Impulse)
@@ -267,7 +271,7 @@ private:
    void LogDebug(string msg)   { if(LogLevel >= LOG_DEBUG)   Print("[DEBUG] ", msg); }
    
    int GetSwarmMultiplier() {
-      return (UseM1MicroSwarm && SwarmTranchesPerWave > 1) ? SwarmTranchesPerWave : 1;
+      return (UseM1MicroSwarm && SwarmTranchesPerWave > 1) ? MathMin(SwarmTranchesPerWave, 3) : 1;
    }
 
    int GetCurrentCycleBucket(const MqlDateTime &dt) {
@@ -372,12 +376,12 @@ private:
       
       // 2. Check Daily Equity Loss Limit (MaxAllowedDailyDD)
       double dailyLossPct = 0.0;
-      if(m_dayStartBalance > 0) {
+      if(m_dayStartBalance > 0 && equity < m_dayStartBalance) {
          dailyLossPct = ((m_dayStartBalance - equity) / m_dayStartBalance) * 100.0;
       }
       
       if(dailyLossPct >= MaxAllowedDailyDD) {
-         LogWarning(StringFormat("SAFETY BELT: Daily Loss reached %.2f%% >= %.2f%% limit! Halting today to protect account!",
+         LogWarning(StringFormat("SAFETY BELT: Daily Floating Loss reached %.2f%% >= %.2f%% limit! Emergency closing and halting today to protect account!",
                                 dailyLossPct, MaxAllowedDailyDD));
          if(AutoCloseOnEmergency && CountOpenPositions() > 0) {
             CloseAllPositions("Emergency Daily Loss Limit reached: " + DoubleToString(dailyLossPct, 2) + "%");
@@ -390,13 +394,34 @@ private:
          return true;
       }
       
-      // 3. Check Friday Night Weekend Close
+      // 3. Check Cycle Floating Equity Loss Limit (MaxMonthlyLossPercent)
+      if(UseMonthlyMaxLoss) {
+         double cycleBase = (m_monthStartBalance > 0.0) ? m_monthStartBalance : m_initialDeposit;
+         if(cycleBase > 0.0 && equity < cycleBase) {
+            double cycleLossPct = ((cycleBase - equity) / cycleBase) * 100.0;
+            if(cycleLossPct >= MaxMonthlyLossPercent) {
+               LogWarning(StringFormat("SAFETY BELT: Cycle Floating Loss reached %.2f%% >= %.2f%% limit! Emergency closing and halting cycle to protect account!",
+                                      cycleLossPct, MaxMonthlyLossPercent));
+               if(AutoCloseOnEmergency && CountOpenPositions() > 0) {
+                  CloseAllPositions("Emergency Cycle Loss Limit reached: " + DoubleToString(cycleLossPct, 2) + "%");
+               }
+               m_monthlyHalted = true;
+               return true;
+            }
+         }
+      }
+      
+      if(m_monthlyHalted) {
+         return true;
+      }
+      
+      // 4. Check Friday Night Weekend Close
       if(CloseFridayNight) {
          MqlDateTime dt;
          TimeToStruct(TimeCurrent(), dt);
          if(dt.day_of_week == 5 && dt.hour >= FridayCloseHour) {
             if(CountOpenPositions() > 0) {
-               CloseAllPositions("Friday Night Safety: Pre-empting weekend gap risk on Gold");
+               CloseAllPositions("Friday Night Safety: Pre-empting weekend gap risk on US30");
             }
             return true;
          }
@@ -627,8 +652,8 @@ private:
       TimeToStruct(TimeCurrent(), dt);
       int hour = dt.hour;
       if(TradeAsianSession && hour >= 0 && hour < 6) return true;
-      if(TradeLondonSession && hour >= LondonStartHour && hour < (LondonStartHour + 4)) return true;
-      if(TradeNewYorkSession && hour >= NewYorkStartHour && hour < (NewYorkStartHour + 4)) return true;
+      if((TradeLondonSession || LondonSilverBullet) && hour >= LondonStartHour && hour < (LondonStartHour + 4)) return true;
+      if((TradeNewYorkSession || NewYorkSilverBullet) && hour >= NewYorkStartHour && hour < (NewYorkStartHour + 4)) return true;
       return false;
    }
    
@@ -914,44 +939,60 @@ private:
          return NormalizeDouble(normLot, digits);
       }
       
-      // Mode 2: Dynamic Percentage Risk Mode (نسبة مخاطرة مئوية ذكية)
-      if(RiskPercent <= 0) return 0.0;
+      // Mode 2: Dynamic Smart Anti-Martingale / Percentage Risk Mode
+      double baseCapital = (m_monthStartBalance > 0.0) ? m_monthStartBalance : m_initialDeposit;
+      if(baseCapital <= 0.0) baseCapital = balance;
       
-      double effectiveRisk = RiskPercent;
+      double cycleProfit = balance - baseCapital;
+      double effectiveRisk = (BaseRiskPercent > 0.0) ? BaseRiskPercent : RiskPercent;
+      if(effectiveRisk <= 0.0) effectiveRisk = 2.50;
+      
+      // Apply Drawdown Brake if active
       if(UseDrawdownBrake) {
-         if(currentDD_Pct >= 5.2) {
-            effectiveRisk = RiskPercent * 0.15; // Tier 3 Emergency Brake
-            LogWarning(StringFormat("Tier 3 Brake: DD %.2f%% >= 5.2%%. Risk throttled to %.2f%%", currentDD_Pct, effectiveRisk));
-         } else if(currentDD_Pct >= 3.6) {
-            effectiveRisk = RiskPercent * 0.35; // Tier 2 Strong Brake
-            LogWarning(StringFormat("Tier 2 Brake: DD %.2f%% >= 3.6%%. Risk throttled to %.2f%%", currentDD_Pct, effectiveRisk));
-         } else if(currentDD_Pct >= 2.0) {
-            effectiveRisk = RiskPercent * 0.65; // Tier 1 Dynamic Soft Brake
-            LogWarning(StringFormat("Tier 1 Brake: DD %.2f%% >= 2.0%%. Risk throttled to %.2f%%", currentDD_Pct, effectiveRisk));
+         if(currentDD_Pct >= 5.0) {
+            effectiveRisk = effectiveRisk * 0.25;
+            LogWarning(StringFormat("Tier 3 Brake: DD %.2f%% >= 5.0%%. Risk cut to %.2f%%", currentDD_Pct, effectiveRisk));
+         } else if(currentDD_Pct >= 3.5) {
+            effectiveRisk = effectiveRisk * 0.50;
+            LogWarning(StringFormat("Tier 2 Brake: DD %.2f%% >= 3.5%%. Risk cut to %.2f%%", currentDD_Pct, effectiveRisk));
+         } else if(currentDD_Pct >= BrakeTriggerDD) {
+            effectiveRisk = effectiveRisk * 0.65;
+            LogWarning(StringFormat("Tier 1 Brake: DD %.2f%% >= %.2f%%. Risk cut to %.2f%%", currentDD_Pct, BrakeTriggerDD, effectiveRisk));
          }
       }
       
-      int swarmMult = GetSwarmMultiplier();
-      int todayLosses = MathMax(m_todayLossCount, GetTodayLossCount());
-      if(UseStreakRiskReducer && (m_consecutiveLosses >= 2 * swarmMult || todayLosses >= 1 * swarmMult)) {
-         effectiveRisk = effectiveRisk * 0.5;
-         LogWarning(StringFormat("Streak Risk Reducer Active! Losses today: %d, Streak: %d. Risk throttled to %.2f%%",
-                                todayLosses, m_consecutiveLosses, effectiveRisk));
-      }
+      double riskAmount = 0.0;
       
-      double riskAmount = balance * (effectiveRisk / 100.0);
-      
-      if(UseProfitShield && m_initialDeposit > 0.0) {
-         double currentMonthProfit = balance - m_initialDeposit;
-         if(currentMonthProfit > 0.0) {
-            double shieldRiskCap = currentMonthProfit * (ProfitShieldMaxRiskPct / 100.0);
-            if(riskAmount > shieldRiskCap) {
-               riskAmount = MathMax(shieldRiskCap, balance * 0.02);
-               effectiveRisk = (riskAmount / balance) * 100.0;
-               LogInfo(StringFormat("Profit Shield Active! Accumulated Month Profit: +%.2f. Risk throttled to $%.2f (%.2f%%) to guarantee 100%% green month!",
-                                    currentMonthProfit, riskAmount, effectiveRisk));
-            }
+      if(cycleProfit <= 0.0 || !UseSmartProfitCompounding) {
+         // Cycle is flat or in drawdown: Risk strictly from base capital with streak reduction
+         int todayLosses = MathMax(m_todayLossCount, GetTodayLossCount());
+         if(UseStreakRiskReducer && (m_consecutiveLosses >= 1 || todayLosses >= 1)) {
+            effectiveRisk = effectiveRisk * 0.5;
+            LogWarning(StringFormat("Streak Risk Reducer: Loss detected (Streak: %d, Today: %d). Risk throttled to %.2f%% to defend principal.",
+                                   m_consecutiveLosses, todayLosses, effectiveRisk));
          }
+         riskAmount = balance * (effectiveRisk / 100.0);
+      }
+      else {
+         // Cycle has accumulated closed profits (Profit Shield Active):
+         // Risk is derived primarily from accumulated profits without endangering base capital!
+         double profitRisk = cycleProfit * (ProfitShieldMaxRiskPct / 100.0);
+         double baseRisk   = baseCapital * (effectiveRisk / 100.0);
+         
+         if(UseStreakRiskReducer && m_consecutiveLosses >= 1) {
+            profitRisk = profitRisk * 0.5;
+         }
+         
+         // Combine base risk with controlled profit risk, ensuring rapid doubling while shielding principal
+         riskAmount = baseRisk + profitRisk;
+         
+         // Enforce hard ceiling on compounded risk %
+         double maxRiskCap = balance * (MaxCompoundedRiskPct / 100.0);
+         if(riskAmount > maxRiskCap) riskAmount = maxRiskCap;
+         
+         effectiveRisk = (riskAmount / balance) * 100.0;
+         LogInfo(StringFormat("Smart Profit Compounding: Cycle Profit +%.2f. Risk $%.2f (%.2f%%). Base Capital $%.2f 100%% Protected!",
+                              cycleProfit, riskAmount, effectiveRisk, baseCapital));
       }
       
       double tickSize = m_symbol.TickSize();
@@ -961,7 +1002,6 @@ private:
       if(tickSize > 0 && tickValue > 0) {
          lossPerLot = (slDistancePrice / tickSize) * tickValue;
       } else {
-         // Fallback via contract size
          double contractSize = m_symbol.ContractSize();
          if(contractSize > 0) lossPerLot = slDistancePrice * contractSize;
       }
@@ -974,11 +1014,33 @@ private:
       double marginOneLot = 0.0;
       double askPrice = m_symbol.Ask();
       if(askPrice <= 0) askPrice = iClose(_Symbol, PERIOD_M5, 0);
-      if(OrderCalcMargin(ORDER_TYPE_BUY, _Symbol, 1.0, askPrice, marginOneLot) && marginOneLot > 0.0) {
-         double freeMargin = m_account.FreeMargin();
-         double maxMarginLot = MathFloor(((freeMargin * 0.85) / marginOneLot) / step) * step;
-         if(normalized > maxMarginLot && maxMarginLot >= minLot) {
-            normalized = maxMarginLot;
+      if(!OrderCalcMargin(ORDER_TYPE_BUY, _Symbol, 1.0, askPrice, marginOneLot)) marginOneLot = 0.0;
+      
+      // MARGIN GUARD: Ensure Margin Level NEVER drops below MinAllowedMarginLevel (300%)
+      double currentMargin = m_account.Margin();
+      double currentEquity = m_account.Equity();
+      if(currentMargin > 0.0) {
+         double currentMarginLevel = (currentEquity / currentMargin) * 100.0;
+         if(currentMarginLevel < MinAllowedMarginLevel) {
+            LogWarning(StringFormat("MARGIN GUARD: Current Margin Level %.2f%% < %.2f%%. Rejecting new trade to protect account!",
+                                   currentMarginLevel, MinAllowedMarginLevel));
+            return 0.0;
+         }
+      }
+      
+      if(marginOneLot > 0.0) {
+         // Equity / (currentMargin + lot * marginOneLot) >= (MinAllowedMarginLevel / 100.0)
+         double maxAllowedTotalMargin = currentEquity / (MinAllowedMarginLevel / 100.0);
+         double maxNewMargin = maxAllowedTotalMargin - currentMargin;
+         if(maxNewMargin <= 0.0) {
+            LogWarning(StringFormat("MARGIN GUARD: Insufficient margin headroom for %.0f%% Margin Level. Rejecting trade!", MinAllowedMarginLevel));
+            return 0.0;
+         }
+         double maxLotForMargin = MathFloor((maxNewMargin / marginOneLot) / step) * step;
+         if(normalized > maxLotForMargin) {
+            LogWarning(StringFormat("MARGIN GUARD: Lot size throttled from %.2f to %.2f to enforce Margin Level >= %.0f%%",
+                                   normalized, maxLotForMargin, MinAllowedMarginLevel));
+            normalized = maxLotForMargin;
          }
       }
       
@@ -1191,7 +1253,10 @@ private:
    }
 
    bool ExecuteSwarmWave(ENUM_ORDER_TYPE orderType, double totalLot, double slDist) {
-      if(!UseM1MicroSwarm || SwarmTranchesPerWave <= 1) {
+      int actualTranches = MathMin(SwarmTranchesPerWave, 3);
+      if(actualTranches < 1) actualTranches = 1;
+      
+      if(!UseM1MicroSwarm || actualTranches <= 1) {
          m_symbol.RefreshRates();
          double price = (orderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
          double tpDist = m_currentATR * ATR_TP_Multiplier;
@@ -1204,7 +1269,6 @@ private:
       if(minLot <= 0) minLot = 0.01;
       
       int maxByMinLot = (int)MathFloor((totalLot + 1e-9) / minLot);
-      int actualTranches = SwarmTranchesPerWave;
       if(actualTranches > maxByMinLot) actualTranches = MathMax(1, maxByMinLot);
       
       m_symbol.RefreshRates();
