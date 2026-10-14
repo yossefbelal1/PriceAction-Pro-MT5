@@ -114,8 +114,8 @@ NYKillZoneEndMin=30
 
 ; --- Position Management & Profit Harvest ---
 UseBreakEven=true
-BE_TriggerATR=1.20
-BE_OffsetPoints=90
+BE_TriggerATR=1.80
+BE_OffsetPoints=50
 UseTrailingStop=false
 UseStructuralTrailing=false
 Trail_StartATR=2.00

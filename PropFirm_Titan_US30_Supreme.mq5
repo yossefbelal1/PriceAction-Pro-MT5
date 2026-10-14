@@ -59,13 +59,16 @@ input bool   UseStreakRiskReducer   = true;     // Reduce risk by 50% after 2 co
 
 input group "=== Monthly Prop Firm Profit Lock & Risk Governance (حماية الأرباح الشهرية) ==="
 input bool   UseMonthlyProfitLock     = true;     // Enable Monthly Profit Lock (Secures Green Months)
-input int    ProfitLockCycleDays      = 0;        // Profit Lock Cycle (0=Monthly, 15=Bi-Weekly 2x/Mo, 10=3x/Mo)
-input double MonthlyTargetProfitPct   = 1.20;     // Target Cycle Profit % (e.g. 1.20% = $120 on $10k)
+input int    ProfitLockCycleDays      = 0;        // Profit Lock Cycle (0=Monthly, 16=Day 1-16 & 17-31, 15=Bi-Weekly)
+input double MonthlyTargetProfitPct   = 1.20;     // Target Cycle 1 Profit % (e.g. 1.20% = $120 on $10k)
+input double Cycle2TargetRatio        = 0.45;     // Cycle 2+ Target Ratio relative to MonthlyTargetProfitPct
 input double MonthlyFloorLockPct      = 0.35;     // Floor Profit % to protect once target reached (e.g. +$35)
 input bool   HaltTradingOnMonthTarget = true;     // Halt new entries for the rest of cycle once target reached
 input bool   UseMonthlyMaxLoss        = true;     // Cycle Circuit Breaker (Max Loss % per cycle)
 input double MaxMonthlyLossPercent    = 4.50;     // Max loss allowed in any single cycle (e.g. 4.5%)
 input int    MaxMonthlyLossCount      = 2;        // Max losing trades allowed per cycle before halting
+input bool   UseProfitShield          = true;     // Profit Shield: Never risk more than accumulated month profit
+input double ProfitShieldMaxRiskPct   = 35.0;     // Max % of accumulated month profit to risk on subsequent waves
 
 input group "=== Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ==="
 input bool   AutoBrokerCalibration      = true;     // Auto-Detect Broker Specifications & Digits (Broker-Agnostic)
@@ -145,6 +148,32 @@ input double HighVolMaxTriggerPoints         = 30.0;       // Max Partial/BE Tri
 input double HighVolBEOffsetATR              = 0.20;       // Dynamic BE Offset in High Vol (x ATR breathing room)
 input double HighVolTrailStepATR             = 0.95;       // Dynamic Trail Step in High Vol (prevents noise stopout)
 
+input group "=== M1 Rapid Micro-Scalp Swarm (نظام السكالبينج المكثف فريم الدقيقة) ==="
+input bool   UseM1MicroSwarm        = false;    // Enable M1 High-Frequency Micro-Scalp Swarm
+input int    SwarmTranchesPerWave   = 12;       // Micro-Scalp trades per wave (splits risk safely across N trades)
+input int    SwarmFastTranchePct    = 50;       // % of Swarm tranches assigned to Fast Scalp TP Ladder
+input double SwarmFastTP_MinATR     = 0.90;     // Fast Scalp Tranches Min TP (x ATR)
+input double SwarmFastTP_MaxATR     = 1.15;     // Fast Scalp Tranches Max TP (x ATR)
+input double SwarmRunnerTP_MinATR   = 2.80;     // Runner Scalp Tranches Min TP (x ATR)
+input double SwarmRunnerTP_MaxATR   = 3.60;     // Runner Scalp Tranches Max TP (x ATR)
+input bool   UseM1BarEntryTiming    = false;    // Allow entry evaluation on every M1 bar
+input double OverallMonthTargetPct  = 0.0;      // Overall Month Profit Target % (0=Disabled, e.g. 100%=Lock 2X)
+input bool   UseAsyncSwarmExecution = true;     // Zero-Latency Async Dispatch (OrderSendAsync for all tranches)
+input bool   UseStagedSwarmScaleIn  = false;    // 3-Tier Staged Scale-In (Probe + Discount Dip / Impulse)
+input int    SwarmTier1Pct          = 20;       // Tier 1 Immediate Probe % of tranches
+input int    SwarmTier2Pct          = 40;       // Tier 2 Scale-In % of tranches
+input double SwarmTier2DipATR       = 0.38;     // Tier 2 Discount Dip trigger (x ATR)
+input double SwarmTier3DipATR       = 0.62;     // Tier 3 Deep Discount Dip trigger (x ATR)
+input double SwarmTier2ImpulseATR   = 0.45;     // Tier 2 Impulse Breakout trigger (x ATR)
+input double SwarmTier3ImpulseATR   = 0.55;     // Tier 3 Impulse Breakout trigger (x ATR)
+input bool   UseMilestoneRatchet    = true;     // Discrete Multi-Stage Profit Ratchet (Zero Tick Choke)
+input double Stage15_TriggerATR     = 1.45;     // Stage 1.5 Ratchet Trigger (x ATR)
+input double Stage15_OffsetATR      = 1.15;     // Stage 1.5 Locked Profit Offset (x ATR)
+input double Stage2_TriggerATR      = 1.85;     // Stage 2 Ratchet Trigger (x ATR)
+input double Stage2_OffsetATR       = 1.45;     // Stage 2 Locked Profit Offset (x ATR)
+input double Stage3_TriggerATR      = 2.50;     // Stage 3 Ratchet Trigger (x ATR)
+input double Stage3_OffsetATR       = 2.10;     // Stage 3 Locked Profit Offset (x ATR)
+
 input group "=== Execution Settings ==="
 input ulong  MagicNumber            = 778811;   // Magic Number
 input int    SlippagePoints         = 10;       // Slippage in points
@@ -168,11 +197,14 @@ struct PositionTracker {
    ulong    ticket;
    datetime openTime;
    double   openPrice;
+   double   anchorPrice;
    double   originalSL;
    double   originalTP;
    double   initialRiskCash;
    double   atrAtEntry;
    bool     beSet;
+   int      ratchetStage;
+   datetime lastModifyAttempt;
    bool     partialClosed;
    bool     trailingActive;
 };
@@ -197,6 +229,11 @@ private:
    double            m_initialDeposit;
    double            m_dayStartBalance;
    double            m_peakEquity;
+   double            m_maxEqDD_Dollar;
+   double            m_maxEqDD_Peak;
+   double            m_maxEqDD_Valley;
+   double            m_maxEqDD_BalAtValley;
+   datetime          m_maxEqDD_Time;
    int               m_todayTradeCount;
    int               m_todayLossCount;
    int               m_consecutiveLosses;
@@ -208,6 +245,19 @@ private:
    bool              m_monthTargetReached;
    bool              m_monthlyHalted;
    datetime          m_lastEntryBarTime;
+   datetime          m_lastWaveDispatchTime;
+   bool              m_waveActive;
+   ENUM_ORDER_TYPE   m_waveOrderType;
+   double            m_waveAnchorPrice;
+   double            m_waveAnchorATR;
+   double            m_waveAnchorSL;
+   double            m_waveTotalLot;
+   int               m_waveActualTranches;
+   int               m_waveTier1Count;
+   int               m_waveTier2Count;
+   bool              m_waveTier2Fired;
+   bool              m_waveTier3Fired;
+   datetime          m_waveStartTime;
    double            m_currentATR;
    bool              m_initialized;
    
@@ -216,24 +266,33 @@ private:
    void LogInfo(string msg)    { if(LogLevel >= LOG_INFO)    Print("[INFO] ",  msg); }
    void LogDebug(string msg)   { if(LogLevel >= LOG_DEBUG)   Print("[DEBUG] ", msg); }
    
+   int GetSwarmMultiplier() {
+      return (UseM1MicroSwarm && SwarmTranchesPerWave > 1) ? SwarmTranchesPerWave : 1;
+   }
+
    int GetCurrentCycleBucket(const MqlDateTime &dt) {
+      if(ProfitLockCycleDays <= 0)  return 1;
+      if(ProfitLockCycleDays == 16) return (dt.day >= 17) ? 2 : 1;
       if(ProfitLockCycleDays == 15) return (dt.day >= 16) ? 2 : 1;
       if(ProfitLockCycleDays == 10) return (dt.day >= 21) ? 3 : ((dt.day >= 11) ? 2 : 1);
       if(ProfitLockCycleDays == 7)  return (dt.day >= 22) ? 4 : ((dt.day >= 15) ? 3 : ((dt.day >= 8) ? 2 : 1));
-      return 1;
+      return ((dt.day - 1) / ProfitLockCycleDays) + 1;
    }
 
    int GetCurrentCycleStartDay(const MqlDateTime &dt) {
+      if(ProfitLockCycleDays <= 0)  return 1;
+      if(ProfitLockCycleDays == 16) return (dt.day >= 17) ? 17 : 1;
       if(ProfitLockCycleDays == 15) return (dt.day >= 16) ? 16 : 1;
       if(ProfitLockCycleDays == 10) return (dt.day >= 21) ? 21 : ((dt.day >= 11) ? 11 : 1);
       if(ProfitLockCycleDays == 7)  return (dt.day >= 22) ? 22 : ((dt.day >= 15) ? 15 : ((dt.day >= 8) ? 8 : 1));
-      return 1;
+      int bucket = ((dt.day - 1) / ProfitLockCycleDays) + 1;
+      return ((bucket - 1) * ProfitLockCycleDays) + 1;
    }
 
    void CheckAndResetDay() {
       MqlDateTime dt;
       TimeToStruct(TimeCurrent(), dt);
-      int cycleKey = dt.mon * 10 + GetCurrentCycleBucket(dt);
+      int cycleKey = dt.mon * 100 + GetCurrentCycleBucket(dt);
       if(cycleKey != m_currentMonth) {
          m_currentMonth = cycleKey;
          m_monthTargetReached = false;
@@ -452,11 +511,22 @@ private:
    bool CheckDailyLimits() {
       if(m_dailyHalted || m_permanentHalted || m_monthlyHalted) return true;
       
+      if(OverallMonthTargetPct > 0.0 && m_initialDeposit > 0.0) {
+         double totalGainPct = ((m_account.Balance() - m_initialDeposit) / m_initialDeposit) * 100.0;
+         if(totalGainPct >= OverallMonthTargetPct) {
+            m_permanentHalted = true;
+            return true;
+         }
+      }
+      
       // Monthly Profit Lock & Governance
       if(UseMonthlyProfitLock) {
          double monthNet = GetMonthNetProfit();
          double baseBal = (m_monthStartBalance > 0 ? m_monthStartBalance : (m_initialDeposit > 0 ? m_initialDeposit : 10000.0));
-         double targetAmount = baseBal * (MonthlyTargetProfitPct / 100.0);
+         MqlDateTime dtNow;
+         TimeToStruct(TimeCurrent(), dtNow);
+         double cycleMult = (ProfitLockCycleDays > 0 && GetCurrentCycleBucket(dtNow) >= 2 && Cycle2TargetRatio > 0.0) ? Cycle2TargetRatio : 1.0;
+         double targetAmount = baseBal * (MonthlyTargetProfitPct * cycleMult / 100.0);
          double floorAmount  = baseBal * (MonthlyFloorLockPct / 100.0);
          
          if(m_monthTargetReached || monthNet >= targetAmount) {
@@ -483,16 +553,18 @@ private:
             m_monthlyHalted = true;
             return true;
          }
-         if(GetMonthLossCount() >= MaxMonthlyLossCount && monthNet <= 0.0) {
+         int swarmMult = GetSwarmMultiplier();
+         if(GetMonthLossCount() >= MaxMonthlyLossCount * swarmMult && monthNet <= 0.0) {
             LogWarning(StringFormat("Monthly Circuit Breaker: Max monthly losses (%d) reached. Halting for the rest of month.", MaxMonthlyLossCount));
             m_monthlyHalted = true;
             return true;
          }
       }
-      int todayTrades = MathMax(m_todayTradeCount, GetTodayTradeCount());
+      int swarmMult = GetSwarmMultiplier();
+      int todayTrades = UseM1MicroSwarm ? m_todayTradeCount : MathMax(m_todayTradeCount, GetTodayTradeCount());
       int todayLosses = MathMax(m_todayLossCount, GetTodayLossCount());
       if(todayTrades >= MaxDailyTrades) return true;
-      if(todayLosses >= MaxDailyLosses) {
+      if(todayLosses >= MaxDailyLosses * swarmMult) {
          LogWarning(StringFormat("Circuit Breaker: Max daily losses (%d) reached. Halting trading today to protect Prop Firm account.", MaxDailyLosses));
          m_dailyHalted = true;
          return true;
@@ -859,14 +931,28 @@ private:
          }
       }
       
+      int swarmMult = GetSwarmMultiplier();
       int todayLosses = MathMax(m_todayLossCount, GetTodayLossCount());
-      if(UseStreakRiskReducer && (m_consecutiveLosses >= 2 || todayLosses >= 1)) {
+      if(UseStreakRiskReducer && (m_consecutiveLosses >= 2 * swarmMult || todayLosses >= 1 * swarmMult)) {
          effectiveRisk = effectiveRisk * 0.5;
          LogWarning(StringFormat("Streak Risk Reducer Active! Losses today: %d, Streak: %d. Risk throttled to %.2f%%",
                                 todayLosses, m_consecutiveLosses, effectiveRisk));
       }
       
       double riskAmount = balance * (effectiveRisk / 100.0);
+      
+      if(UseProfitShield && m_initialDeposit > 0.0) {
+         double currentMonthProfit = balance - m_initialDeposit;
+         if(currentMonthProfit > 0.0) {
+            double shieldRiskCap = currentMonthProfit * (ProfitShieldMaxRiskPct / 100.0);
+            if(riskAmount > shieldRiskCap) {
+               riskAmount = MathMax(shieldRiskCap, balance * 0.02);
+               effectiveRisk = (riskAmount / balance) * 100.0;
+               LogInfo(StringFormat("Profit Shield Active! Accumulated Month Profit: +%.2f. Risk throttled to $%.2f (%.2f%%) to guarantee 100%% green month!",
+                                    currentMonthProfit, riskAmount, effectiveRisk));
+            }
+         }
+      }
       
       double tickSize = m_symbol.TickSize();
       double tickValue = m_symbol.TickValue(); // Value of 1 tick for 1.0 lot in account currency
@@ -913,7 +999,22 @@ private:
       }
    }
    
-   bool ExecuteOrder(ENUM_ORDER_TYPE orderType, double volume, double price, double sl, double tp) {
+   bool ModifyPositionAsync(ulong ticket, double newSL, double currentTP) {
+      if(!UseAsyncSwarmExecution) {
+         return m_trade.PositionModify(ticket, newSL, currentTP);
+      }
+      MqlTradeRequest req = {};
+      MqlTradeResult  res = {};
+      req.action   = TRADE_ACTION_SLTP;
+      req.position = ticket;
+      req.symbol   = _Symbol;
+      req.sl       = newSL;
+      req.tp       = currentTP;
+      req.magic    = MagicNumber;
+      return OrderSendAsync(req, res);
+   }
+
+   bool ExecuteOrder(ENUM_ORDER_TYPE orderType, double volume, double price, double sl, double tp, bool isSwarmTranche = false) {
       MqlTradeRequest request = {};
       MqlTradeResult result = {};
       
@@ -935,6 +1036,13 @@ private:
       request.comment      = "BAKOME_v3.1";
       ConfigureFillingMode(request);
       
+      if(UseAsyncSwarmExecution && isSwarmTranche) {
+         ZeroMemory(result);
+         if(OrderSendAsync(request, result)) {
+            return true;
+         }
+      }
+      
       for(int attempt = 0; attempt < OrderRetryCount; attempt++) {
          ZeroMemory(result);
          if(OrderSend(request, result)) {
@@ -948,8 +1056,8 @@ private:
                      }
                   }
                }
-               RegisterPosition(posTicket, price, sl, tp, volume, m_currentATR);
-               m_todayTradeCount++;
+               RegisterPosition(posTicket, price, sl, tp, volume, m_currentATR, isSwarmTranche);
+               if(!isSwarmTranche) m_todayTradeCount++;
                LogInfo(StringFormat("Order Placed: %s %.2f @ %.3f | SL: %.3f | TP: %.3f | Ticket: %I64u",
                                     EnumToString(orderType), volume, price, sl, tp, posTicket));
                return true;
@@ -959,37 +1067,224 @@ private:
                                 attempt + 1, OrderRetryCount, result.retcode, result.comment));
          Sleep(OrderRetryDelayMs * (attempt + 1));
          // Refresh price
+         double origTpDist = MathAbs(tp - price);
+         if(origTpDist <= 0) origTpDist = m_currentATR * ATR_TP_Multiplier;
          m_symbol.RefreshRates();
          if(orderType == ORDER_TYPE_BUY) {
             request.price = m_symbol.Ask();
-            request.sl    = request.price - (m_currentATR * ATR_SL_Multiplier);
-            request.tp    = request.price + (m_currentATR * ATR_TP_Multiplier);
+            request.sl    = NormalizeDouble(request.price - (m_currentATR * ATR_SL_Multiplier), (int)m_symbol.Digits());
+            request.tp    = NormalizeDouble(request.price + origTpDist, (int)m_symbol.Digits());
          } else {
             request.price = m_symbol.Bid();
-            request.sl    = request.price + (m_currentATR * ATR_SL_Multiplier);
-            request.tp    = request.price - (m_currentATR * ATR_TP_Multiplier);
+            request.sl    = NormalizeDouble(request.price + (m_currentATR * ATR_SL_Multiplier), (int)m_symbol.Digits());
+            request.tp    = NormalizeDouble(request.price - origTpDist, (int)m_symbol.Digits());
          }
       }
       LogError(StringFormat("Order Execution failed completely. Retcode: %d", result.retcode));
       return false;
    }
    
-   void RegisterPosition(ulong ticket, double entry, double sl, double tp, double volume, double atr) {
+   bool DispatchSwarmTrancheRange(int startIdx, int endIdx) {
+      if(endIdx <= startIdx || m_waveActualTranches <= 0) return false;
+      
+      double step = m_symbol.LotsStep();
+      double minLot = m_symbol.LotsMin();
+      if(step <= 0) step = 0.01;
+      if(minLot <= 0) minLot = 0.01;
+      int lotDigits = (step < 0.1) ? 2 : 1;
+      
+      int actualTranches = m_waveActualTranches;
+      double minReqLot = actualTranches * minLot;
+      double extraLot  = MathMax(0.0, m_waveTotalLot - minReqLot);
+      int extraSteps   = (int)MathRound(extraLot / step);
+      int baseExtra    = extraSteps / actualTranches;
+      int remExtra     = extraSteps % actualTranches;
+      int pct          = MathMax(0, MathMin(100, SwarmFastTranchePct));
+      int halfTranches = (int)MathRound((double)actualTranches * ((double)pct / 100.0));
+      
+      m_symbol.RefreshRates();
+      double curPrice = (m_waveOrderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+      double anchor   = (m_waveAnchorPrice > 0.0) ? m_waveAnchorPrice : curPrice;
+      double atr      = (m_waveAnchorATR > 0.0) ? m_waveAnchorATR : m_currentATR;
+      double sl       = m_waveAnchorSL;
+      
+      bool anySent = false;
+      for(int t = startIdx; t < endIdx; t++) {
+         int eSteps = baseExtra + ((t < remExtra) ? 1 : 0);
+         double tLot = NormalizeDouble(minLot + eSteps * step, lotDigits);
+         if(tLot < minLot) tLot = minLot;
+         
+         double tpMult = ATR_TP_Multiplier;
+         double effFastMin   = SwarmFastTP_MinATR;
+         double effFastMax   = SwarmFastTP_MaxATR;
+         double effRunnerMin = SwarmRunnerTP_MinATR;
+         double effRunnerMax = SwarmRunnerTP_MaxATR;
+         if(actualTranches > 1) {
+            int fastBefore = (t * halfTranches) / actualTranches;
+            int fastAfter  = ((t + 1) * halfTranches) / actualTranches;
+            bool isFast    = (fastAfter > fastBefore);
+            if(isFast) {
+               double r = (halfTranches > 1) ? ((double)fastBefore / (double)(halfTranches - 1)) : 1.0;
+               tpMult = effFastMin + r * (effFastMax - effFastMin);
+            } else {
+               int remCount = actualTranches - halfTranches;
+               int rIdx = t - fastBefore;
+               double r = (remCount > 1) ? ((double)rIdx / (double)(remCount - 1)) : 1.0;
+               tpMult = effRunnerMin + r * (effRunnerMax - effRunnerMin);
+            }
+         }
+         
+         if(!UseAsyncSwarmExecution) {
+            m_symbol.RefreshRates();
+            curPrice = (m_waveOrderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+         }
+         double tpDist_t = atr * tpMult;
+         double tp = NormalizeDouble((m_waveOrderType == ORDER_TYPE_BUY) ? (anchor + tpDist_t) : (anchor - tpDist_t), (int)m_symbol.Digits());
+         
+         if(ExecuteOrder(m_waveOrderType, tLot, curPrice, sl, tp, true)) {
+            anySent = true;
+         }
+      }
+      if(anySent) m_lastWaveDispatchTime = TimeCurrent();
+      return anySent;
+   }
+   
+   void ProcessActiveSwarmWave() {
+      if(!m_waveActive || !UseStagedSwarmScaleIn) return;
+      
+      if((m_waveTier2Fired && m_waveTier3Fired) || (TimeCurrent() - m_waveStartTime > 2400)) {
+         m_waveActive = false;
+         return;
+      }
+      if((TimeCurrent() - m_waveStartTime > 5) && CountOpenPositions() == 0) {
+         m_waveActive = false;
+         return;
+      }
+      
+      m_symbol.RefreshRates();
+      double curPrice = (m_waveOrderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+      double favDist  = (m_waveOrderType == ORDER_TYPE_BUY) ? (curPrice - m_waveAnchorPrice) : (m_waveAnchorPrice - curPrice);
+      double advDist  = -favDist;
+      double atr      = (m_waveAnchorATR > 0.0) ? m_waveAnchorATR : m_currentATR;
+      if(atr <= 0.0) return;
+      
+      if(advDist >= atr * ATR_SL_Multiplier) {
+         m_waveActive = false;
+         return;
+      }
+      
+      if(!m_waveTier2Fired) {
+         if(advDist >= atr * SwarmTier2DipATR || favDist >= atr * SwarmTier2ImpulseATR) {
+            DispatchSwarmTrancheRange(m_waveTier1Count, m_waveTier1Count + m_waveTier2Count);
+            m_waveTier2Fired = true;
+         }
+      }
+      if(!m_waveTier3Fired) {
+         if(advDist >= atr * SwarmTier3DipATR || favDist >= atr * SwarmTier3ImpulseATR) {
+            DispatchSwarmTrancheRange(m_waveTier1Count + m_waveTier2Count, m_waveActualTranches);
+            m_waveTier3Fired = true;
+         }
+      }
+      if(m_waveTier2Fired && m_waveTier3Fired) {
+         m_waveActive = false;
+      }
+   }
+
+   bool ExecuteSwarmWave(ENUM_ORDER_TYPE orderType, double totalLot, double slDist) {
+      if(!UseM1MicroSwarm || SwarmTranchesPerWave <= 1) {
+         m_symbol.RefreshRates();
+         double price = (orderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+         double tpDist = m_currentATR * ATR_TP_Multiplier;
+         double sl = NormalizeDouble((orderType == ORDER_TYPE_BUY) ? (price - slDist) : (price + slDist), (int)m_symbol.Digits());
+         double tp = NormalizeDouble((orderType == ORDER_TYPE_BUY) ? (price + tpDist) : (price - tpDist), (int)m_symbol.Digits());
+         return ExecuteOrder(orderType, totalLot, price, sl, tp, false);
+      }
+      
+      double minLot = m_symbol.LotsMin();
+      if(minLot <= 0) minLot = 0.01;
+      
+      int maxByMinLot = (int)MathFloor((totalLot + 1e-9) / minLot);
+      int actualTranches = SwarmTranchesPerWave;
+      if(actualTranches > maxByMinLot) actualTranches = MathMax(1, maxByMinLot);
+      
+      m_symbol.RefreshRates();
+      double price = (orderType == ORDER_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+      double sl = NormalizeDouble((orderType == ORDER_TYPE_BUY) ? (price - slDist) : (price + slDist), (int)m_symbol.Digits());
+      
+      m_waveOrderType      = orderType;
+      m_waveAnchorPrice    = price;
+      m_waveAnchorATR      = m_currentATR;
+      m_waveAnchorSL       = sl;
+      m_waveTotalLot       = totalLot;
+      m_waveActualTranches = actualTranches;
+      m_waveStartTime      = TimeCurrent();
+      
+      bool anyExecuted = false;
+      if(!UseStagedSwarmScaleIn) {
+         m_waveActive     = false;
+         m_waveTier2Fired = true;
+         m_waveTier3Fired = true;
+         anyExecuted = DispatchSwarmTrancheRange(0, actualTranches);
+      } else {
+         m_waveTier1Count = MathMax(1, (int)MathRound((double)actualTranches * ((double)SwarmTier1Pct / 100.0)));
+         m_waveTier2Count = MathMax(1, (int)MathRound((double)actualTranches * ((double)SwarmTier2Pct / 100.0)));
+         if(m_waveTier1Count > actualTranches) m_waveTier1Count = actualTranches;
+         if(m_waveTier1Count + m_waveTier2Count > actualTranches) m_waveTier2Count = MathMax(0, actualTranches - m_waveTier1Count);
+         m_waveTier2Fired = (m_waveTier2Count <= 0);
+         m_waveTier3Fired = (m_waveTier1Count + m_waveTier2Count >= actualTranches);
+         m_waveActive     = (!m_waveTier2Fired || !m_waveTier3Fired);
+         anyExecuted = DispatchSwarmTrancheRange(0, m_waveTier1Count);
+      }
+      
+      if(anyExecuted) m_todayTradeCount++;
+      return anyExecuted;
+   }
+
+   void RegisterPosition(ulong ticket, double entry, double sl, double tp, double volume, double atr, bool isSwarmTranche = false) {
       int size = ArraySize(m_trackedPositions);
       ArrayResize(m_trackedPositions, size + 1);
+      double anchor = (isSwarmTranche && m_waveAnchorPrice > 0.0) ? m_waveAnchorPrice : entry;
       m_trackedPositions[size].ticket = ticket;
       m_trackedPositions[size].openTime = TimeCurrent();
       m_trackedPositions[size].openPrice = entry;
+      m_trackedPositions[size].anchorPrice = anchor;
       m_trackedPositions[size].originalSL = sl;
       m_trackedPositions[size].originalTP = tp;
       m_trackedPositions[size].atrAtEntry = atr;
       m_trackedPositions[size].initialRiskCash = MathAbs(entry - sl) * m_symbol.ContractSize() * volume;
-      m_trackedPositions[size].beSet = false;
-      m_trackedPositions[size].partialClosed = false;
+      bool isFastTP = (isSwarmTranche && tp > 0.0 && atr > 0.0 && MathAbs(tp - anchor) <= atr * (BE_TriggerATR + 0.02));
+      m_trackedPositions[size].beSet = isFastTP;
+      m_trackedPositions[size].ratchetStage = 0;
+      m_trackedPositions[size].lastModifyAttempt = 0;
+      m_trackedPositions[size].partialClosed = isSwarmTranche;
       m_trackedPositions[size].trailingActive = false;
    }
    
+   void SyncOpenPositions() {
+      for(int p = 0; p < PositionsTotal(); p++) {
+         if(m_position.SelectByIndex(p) && m_position.Magic() == MagicNumber && m_position.Symbol() == _Symbol) {
+            ulong ticket = m_position.Ticket();
+            bool found = false;
+            for(int i = 0; i < ArraySize(m_trackedPositions); i++) {
+               if(m_trackedPositions[i].ticket == ticket || m_trackedPositions[i].ticket == m_position.Identifier()) {
+                  found = true;
+                  break;
+               }
+            }
+            if(!found) {
+               double entry = m_position.PriceOpen();
+               double sl    = m_position.StopLoss();
+               double tp    = m_position.TakeProfit();
+               double vol   = m_position.Volume();
+               double atr   = (m_waveAnchorATR > 0.0) ? m_waveAnchorATR : m_currentATR;
+               RegisterPosition(ticket, entry, sl, tp, vol, atr, UseM1MicroSwarm);
+            }
+         }
+      }
+   }
+
    void ManagePositions() {
+      SyncOpenPositions();
       m_symbol.RefreshRates();
       double bid = m_symbol.Bid();
       double ask = m_symbol.Ask();
@@ -1039,6 +1334,7 @@ private:
          
          ENUM_POSITION_TYPE pType = m_position.PositionType();
          double openPrice = m_position.PriceOpen();
+         double refPrice  = (m_trackedPositions[i].anchorPrice > 0.0) ? m_trackedPositions[i].anchorPrice : openPrice;
          double currentSL = m_position.StopLoss();
          double currentTP = m_position.TakeProfit();
          double atr = (m_trackedPositions[i].atrAtEntry > 0) ? m_trackedPositions[i].atrAtEntry : m_currentATR;
@@ -1047,8 +1343,8 @@ private:
          if(UsePartialClose && !m_trackedPositions[i].partialClosed && atr > 0) {
             double pcTrigger = atr * PartialCloseTriggerATR;
             bool triggerHit = false;
-            if(pType == POSITION_TYPE_BUY && (bid - openPrice) >= pcTrigger) triggerHit = true;
-            if(pType == POSITION_TYPE_SELL && (openPrice - ask) >= pcTrigger) triggerHit = true;
+            if(pType == POSITION_TYPE_BUY && (bid - refPrice) >= pcTrigger) triggerHit = true;
+            if(pType == POSITION_TYPE_SELL && (refPrice - ask) >= pcTrigger) triggerHit = true;
             
             if(triggerHit) {
                double closeVol = m_position.Volume() * (PartialClosePercent / 100.0);
@@ -1065,41 +1361,117 @@ private:
          
          // 2. Smart Break Even Logic (Guaranteed Spread-Immune for Standard Accounts)
          if(UseBreakEven && !m_trackedPositions[i].beSet && atr > 0) {
-            double beTriggerDist = atr * BE_TriggerATR;
+            if((pType == POSITION_TYPE_BUY && currentSL > refPrice) ||
+               (pType == POSITION_TYPE_SELL && currentSL > 0.0 && currentSL < refPrice)) {
+               m_trackedPositions[i].beSet = true;
+               if(m_trackedPositions[i].ratchetStage < 1) m_trackedPositions[i].ratchetStage = 1;
+            } else {
+               double effBETrigger = BE_TriggerATR;
+               double effBEOffset  = DynamicBEOffsetATRRatio;
+               double beTriggerDist = atr * effBETrigger;
+               double currentSpreadPrice = ask - bid;
+               if(currentSpreadPrice <= 0) currentSpreadPrice = (double)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * m_symbol.Point();
+               
+               double offset = 0.0;
+               if(AutoBrokerCalibration || UseDynamicBreakeven) {
+                  // Dynamically lock live spread + commission buffer + ATR cushion
+                  double pointOffsetPrice = PointToPrice(BE_OffsetPoints);
+                  double atrOffsetPrice = atr * effBEOffset;
+                  offset = MathMax(currentSpreadPrice * 2.0, MathMax(pointOffsetPrice, atrOffsetPrice));
+               } else {
+                  offset = MathMax(currentSpreadPrice * 1.5, MathMax(BE_OffsetPoints * m_symbol.Point(), atr * 0.15));
+               }
+               
+               double stopLevel = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * m_symbol.Point();
+               double minDistance = (AutoBrokerCalibration) ? MathMax(stopLevel, currentSpreadPrice * 1.5) : stopLevel;
+               if(minDistance < 10 * m_symbol.Point()) minDistance = 10 * m_symbol.Point();
+               
+               if(pType == POSITION_TYPE_BUY) {
+                  if((bid - refPrice) >= beTriggerDist) {
+                     double rawSL = MathMax(refPrice + offset, openPrice + currentSpreadPrice * 2.0);
+                     double newSL = NormalizeDouble(rawSL, (int)m_symbol.Digits());
+                     if(newSL > currentSL && newSL < (bid - minDistance)) {
+                        if(!UseAsyncSwarmExecution || (TimeCurrent() - m_trackedPositions[i].lastModifyAttempt >= 4)) {
+                           if(ModifyPositionAsync(ticket, newSL, currentTP)) {
+                              m_trackedPositions[i].lastModifyAttempt = TimeCurrent();
+                              m_trackedPositions[i].beSet = true;
+                              if(m_trackedPositions[i].ratchetStage < 1) m_trackedPositions[i].ratchetStage = 1;
+                              LogInfo(StringFormat("Smart Break Even set for BUY #%I64u @ %.3f (Net Profit Locked: +%.2f)", ticket, newSL, offset));
+                           }
+                        }
+                     }
+                  }
+               } else if(pType == POSITION_TYPE_SELL) {
+                  if((refPrice - ask) >= beTriggerDist) {
+                     double rawSL = MathMin(refPrice - offset, openPrice - currentSpreadPrice * 2.0);
+                     double newSL = NormalizeDouble(rawSL, (int)m_symbol.Digits());
+                     if((newSL < currentSL || currentSL == 0) && newSL > (ask + minDistance)) {
+                        if(!UseAsyncSwarmExecution || (TimeCurrent() - m_trackedPositions[i].lastModifyAttempt >= 4)) {
+                           if(ModifyPositionAsync(ticket, newSL, currentTP)) {
+                              m_trackedPositions[i].lastModifyAttempt = TimeCurrent();
+                              m_trackedPositions[i].beSet = true;
+                              if(m_trackedPositions[i].ratchetStage < 1) m_trackedPositions[i].ratchetStage = 1;
+                              LogInfo(StringFormat("Smart Break Even set for SELL #%I64u @ %.3f (Net Profit Locked: +%.2f)", ticket, newSL, offset));
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+         
+         // 2.5 Discrete Multi-Stage Milestone Ratchet
+         if(UseMilestoneRatchet && atr > 0) {
             double currentSpreadPrice = ask - bid;
             if(currentSpreadPrice <= 0) currentSpreadPrice = (double)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * m_symbol.Point();
-            
-            double offset = 0.0;
-            if(AutoBrokerCalibration || UseDynamicBreakeven) {
-               // Dynamically lock live spread + commission buffer + ATR cushion
-               double pointOffsetPrice = PointToPrice(BE_OffsetPoints);
-               double atrOffsetPrice = atr * DynamicBEOffsetATRRatio;
-               offset = MathMax(currentSpreadPrice * 2.0, MathMax(pointOffsetPrice, atrOffsetPrice));
-            } else {
-               offset = MathMax(currentSpreadPrice * 1.5, MathMax(BE_OffsetPoints * m_symbol.Point(), atr * 0.15));
-            }
-            
             double stopLevel = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * m_symbol.Point();
             double minDistance = (AutoBrokerCalibration) ? MathMax(stopLevel, currentSpreadPrice * 1.5) : stopLevel;
             if(minDistance < 10 * m_symbol.Point()) minDistance = 10 * m_symbol.Point();
             
-            if(pType == POSITION_TYPE_BUY) {
-               if((bid - openPrice) >= beTriggerDist) {
-                  double newSL = NormalizeDouble(openPrice + offset, (int)m_symbol.Digits());
-                  if(newSL > currentSL && newSL < (bid - minDistance)) {
-                     if(m_trade.PositionModify(ticket, newSL, currentTP)) {
-                        m_trackedPositions[i].beSet = true;
-                        LogInfo(StringFormat("Smart Break Even set for BUY #%I64u @ %.3f (Net Profit Locked: +%.2f)", ticket, newSL, offset));
+            double favDist = (pType == POSITION_TYPE_BUY) ? (bid - refPrice) : (refPrice - ask);
+            double targetOffsetATR = 0.0;
+            int targetStage = 0;
+            if(favDist >= atr * Stage3_TriggerATR) {
+               targetOffsetATR = Stage3_OffsetATR;
+               targetStage = 4;
+            } else if(favDist >= atr * Stage2_TriggerATR) {
+               targetOffsetATR = Stage2_OffsetATR;
+               targetStage = 3;
+            } else if(Stage15_TriggerATR > 0.0 && favDist >= atr * Stage15_TriggerATR) {
+               targetOffsetATR = Stage15_OffsetATR;
+               targetStage = 2;
+            }
+            
+            if(targetStage > m_trackedPositions[i].ratchetStage && targetOffsetATR > 0.0) {
+               double lockDist = atr * targetOffsetATR;
+               if(pType == POSITION_TYPE_BUY) {
+                  double rawSL = MathMax(refPrice + lockDist, openPrice + currentSpreadPrice * 2.0);
+                  double newSL = NormalizeDouble(rawSL, (int)m_symbol.Digits());
+                  if(currentSL >= newSL - m_symbol.Point()) {
+                     m_trackedPositions[i].ratchetStage = targetStage;
+                     m_trackedPositions[i].beSet = true;
+                  } else if(newSL > currentSL && newSL < (bid - minDistance)) {
+                     if(!UseAsyncSwarmExecution || (TimeCurrent() - m_trackedPositions[i].lastModifyAttempt >= 2)) {
+                        if(ModifyPositionAsync(ticket, newSL, currentTP)) {
+                           m_trackedPositions[i].lastModifyAttempt = TimeCurrent();
+                           m_trackedPositions[i].ratchetStage = targetStage;
+                           m_trackedPositions[i].beSet = true;
+                        }
                      }
                   }
-               }
-            } else if(pType == POSITION_TYPE_SELL) {
-               if((openPrice - ask) >= beTriggerDist) {
-                  double newSL = NormalizeDouble(openPrice - offset, (int)m_symbol.Digits());
-                  if((newSL < currentSL || currentSL == 0) && newSL > (ask + minDistance)) {
-                     if(m_trade.PositionModify(ticket, newSL, currentTP)) {
-                        m_trackedPositions[i].beSet = true;
-                        LogInfo(StringFormat("Smart Break Even set for SELL #%I64u @ %.3f (Net Profit Locked: +%.2f)", ticket, newSL, offset));
+               } else if(pType == POSITION_TYPE_SELL) {
+                  double rawSL = MathMin(refPrice - lockDist, openPrice - currentSpreadPrice * 2.0);
+                  double newSL = NormalizeDouble(rawSL, (int)m_symbol.Digits());
+                  if(currentSL > 0.0 && currentSL <= newSL + m_symbol.Point()) {
+                     m_trackedPositions[i].ratchetStage = targetStage;
+                     m_trackedPositions[i].beSet = true;
+                  } else if((newSL < currentSL || currentSL == 0) && newSL > (ask + minDistance)) {
+                     if(!UseAsyncSwarmExecution || (TimeCurrent() - m_trackedPositions[i].lastModifyAttempt >= 2)) {
+                        if(ModifyPositionAsync(ticket, newSL, currentTP)) {
+                           m_trackedPositions[i].lastModifyAttempt = TimeCurrent();
+                           m_trackedPositions[i].ratchetStage = targetStage;
+                           m_trackedPositions[i].beSet = true;
+                        }
                      }
                   }
                }
@@ -1208,7 +1580,7 @@ private:
                }
                
                if(proposedSL > currentSL + minTrailStep && proposedSL < bid) {
-                  if(m_trade.PositionModify(ticket, proposedSL, currentTP)) {
+                  if(ModifyPositionAsync(ticket, proposedSL, currentTP)) {
                      m_trackedPositions[i].trailingActive = true;
                      LogDebug(StringFormat("Structural Trailing SL updated for BUY #%I64u -> %.3f", ticket, proposedSL));
                   }
@@ -1238,7 +1610,7 @@ private:
                }
                
                if((proposedSL < currentSL - minTrailStep || currentSL == 0) && proposedSL > ask) {
-                  if(m_trade.PositionModify(ticket, proposedSL, currentTP)) {
+                  if(ModifyPositionAsync(ticket, proposedSL, currentTP)) {
                      m_trackedPositions[i].trailingActive = true;
                      LogDebug(StringFormat("Structural Trailing SL updated for SELL #%I64u -> %.3f", ticket, proposedSL));
                   }
@@ -1261,7 +1633,10 @@ public:
    CUltimateICTGoldScalper() : m_initialDeposit(0), m_dayStartBalance(0), m_peakEquity(0), m_todayTradeCount(0),
                               m_todayLossCount(0), m_consecutiveLosses(0), m_dailyHalted(false),
                               m_permanentHalted(false), m_currentDay(0), m_lastEntryBarTime(0),
-                              m_currentATR(0), m_initialized(false) {}
+                              m_lastWaveDispatchTime(0), m_waveActive(false), m_waveAnchorPrice(0),
+                              m_waveAnchorATR(0), m_waveAnchorSL(0), m_waveTotalLot(0), m_waveActualTranches(0),
+                              m_waveTier1Count(0), m_waveTier2Count(0), m_waveTier2Fired(true), m_waveTier3Fired(true),
+                              m_waveStartTime(0), m_currentATR(0), m_initialized(false) {}
                               
    ~CUltimateICTGoldScalper() {
       IndicatorRelease(m_atrHandle);
@@ -1303,11 +1678,20 @@ public:
       m_peakEquity = m_account.Equity();
       if(m_initialDeposit <= 0) m_initialDeposit = 10000.0;
       if(m_peakEquity <= 0) m_peakEquity = m_dayStartBalance;
+      m_maxEqDD_Dollar = 0.0;
+      m_maxEqDD_Peak = m_peakEquity;
+      m_maxEqDD_Valley = m_peakEquity;
+      m_maxEqDD_BalAtValley = m_dayStartBalance;
+      m_maxEqDD_Time = 0;
       m_todayTradeCount = 0;
       m_todayLossCount = 0;
       m_consecutiveLosses = 0;
       m_dailyHalted = false;
       m_permanentHalted = false;
+      m_lastWaveDispatchTime = 0;
+      m_waveActive = false;
+      m_waveTier2Fired = true;
+      m_waveTier3Fired = true;
       m_initialized = true;
       
       LogInfo(StringFormat("BAKOME ICT Gold Scalper v3.1 successfully initialized. Symbol: %s | Magic: %I64u | Deposit: %.2f", _Symbol, MagicNumber, m_initialDeposit));
@@ -1319,8 +1703,26 @@ public:
       return true;
    }
    
+   void PrintDiagnostics() {
+      PrintFormat("[MAX_EQDD] Time=%s | MaxDD=$%.2f | PeakEq=%.2f -> ValleyEq=%.2f | BalAtValley=%.2f | FinalBal=%.2f",
+                  TimeToString(m_maxEqDD_Time, TIME_DATE|TIME_SECONDS),
+                  m_maxEqDD_Dollar, m_maxEqDD_Peak, m_maxEqDD_Valley, m_maxEqDD_BalAtValley, m_account.Balance());
+   }
+   
    void OnTick() {
       if(!m_initialized) return;
+      
+      double curEq = m_account.Equity();
+      double curBal = m_account.Balance();
+      if(curEq > m_peakEquity) m_peakEquity = curEq;
+      double curDD = m_peakEquity - curEq;
+      if(curDD > m_maxEqDD_Dollar) {
+         m_maxEqDD_Dollar = curDD;
+         m_maxEqDD_Peak = m_peakEquity;
+         m_maxEqDD_Valley = curEq;
+         m_maxEqDD_BalAtValley = curBal;
+         m_maxEqDD_Time = TimeCurrent();
+      }
       
       CheckAndResetDay();
       
@@ -1333,13 +1735,18 @@ public:
       if(CopyBuffer(m_atrHandle, 0, 0, 1, atrBuffer) > 0)
          m_currentATR = atrBuffer[0];
          
-      // Manage active positions (Trailing, Break Even, Partial Close)
+      // Manage active positions (Trailing, Break Even, Partial Close, Milestone Ratchet)
       ManagePositions();
+      
+      // Process active Staged Swarm Wave scale-in tiers
+      ProcessActiveSwarmWave();
       
       // Check Filters
       if(!IsInTradingSession() || !IsInKillZone()) return;
       if(CheckDailyLimits()) return;
-      if(CountOpenPositions() >= MaxPositions) return;
+      if(TimeCurrent() - m_lastWaveDispatchTime < 10) return;
+      if(UseM1MicroSwarm && MaxPositions == 1 && (CountOpenPositions() > 0 || m_waveActive)) return;
+      if(CountOpenPositions() >= MaxPositions * GetSwarmMultiplier()) return;
       
       // Spread and ATR sanity checks (Universal Broker-Calibrated)
       m_symbol.RefreshRates();
@@ -1358,7 +1765,8 @@ public:
       }
       
       // Prevent multiple entries on the same bar
-      datetime currentBarTime = iTime(_Symbol, PERIOD_M5, 0);
+      ENUM_TIMEFRAMES entryBarTF = UseM1BarEntryTiming ? _Period : PERIOD_M5;
+      datetime currentBarTime = iTime(_Symbol, entryBarTF, 0);
       if(currentBarTime == m_lastEntryBarTime) return;
       
       // Strategy Decision
@@ -1369,7 +1777,6 @@ public:
       
       m_symbol.RefreshRates();
       double slDist = m_currentATR * ATR_SL_Multiplier;
-      double tpDist = m_currentATR * ATR_TP_Multiplier;
       double lot = CalculateLotSize(slDist);
       
       if(lot <= 0) {
@@ -1378,17 +1785,11 @@ public:
       }
       
       if(bias == POSITION_TYPE_BUY) {
-         double ask = m_symbol.Ask();
-         double sl = NormalizeDouble(ask - slDist, (int)m_symbol.Digits());
-         double tp = NormalizeDouble(ask + tpDist, (int)m_symbol.Digits());
-         if(ExecuteOrder(ORDER_TYPE_BUY, lot, ask, sl, tp)) {
+         if(ExecuteSwarmWave(ORDER_TYPE_BUY, lot, slDist)) {
             m_lastEntryBarTime = currentBarTime;
          }
       } else if(bias == POSITION_TYPE_SELL) {
-         double bid = m_symbol.Bid();
-         double sl = NormalizeDouble(bid + slDist, (int)m_symbol.Digits());
-         double tp = NormalizeDouble(bid - tpDist, (int)m_symbol.Digits());
-         if(ExecuteOrder(ORDER_TYPE_SELL, lot, bid, sl, tp)) {
+         if(ExecuteSwarmWave(ORDER_TYPE_SELL, lot, slDist)) {
             m_lastEntryBarTime = currentBarTime;
          }
       }
@@ -1406,6 +1807,7 @@ int OnInit() {
 }
 
 void OnDeinit(const int reason) {
+   ExtEA.PrintDiagnostics();
    Print("BAKOME EA deinitialized with reason code: ", reason);
 }
 

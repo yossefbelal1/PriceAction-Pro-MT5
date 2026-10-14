@@ -33,9 +33,8 @@ TradeDirection=0
 ; --- Lot Sizing & Risk Mode Control ---
 LotCalcMode=0
 FixedLotSize=0.10
-RiskPercent=2.20
-MaxDailyRiskPercent=3.00
-MaxDailyProfitPercent=10.00
+MaxDailyRiskPercent=50.00
+MaxDailyProfitPercent=200.00
 MaxPositions=1
 MaxDailyTrades=1
 MaxDailyLosses=1
@@ -57,18 +56,16 @@ UseStreakRiskReducer=true
 
 ; --- Monthly Prop Firm Profit Lock & Risk Governance ---
 UseMonthlyProfitLock=true
-MonthlyTargetProfitPct=1.20
-MonthlyFloorLockPct=0.35
+MonthlyFloorLockPct=2.50
 HaltTradingOnMonthTarget=true
 UseMonthlyMaxLoss=true
-MaxMonthlyLossPercent=4.50
-MaxMonthlyLossCount=2
+MaxMonthlyLossPercent=4.00
+MaxMonthlyLossCount=1
 
-; --- Universal Broker Adaptation (التكيف الديناميكي مع أي بروكر) ---
+; --- Universal Broker Adaptation (???????????? ???????????????????? ???? ???? ??????????) ---
 AutoBrokerCalibration=true
 UseDynamicSpreadGate=true
 UseDynamicBreakeven=true
-DynamicBEOffsetATRRatio=0.15
 
 ; --- Predictive Quality & Spread Gates ---
 UseSpreadToATRGate=true
@@ -76,7 +73,7 @@ MaxSpreadToATRRatio=0.22
 MinATR_Points=20.0
 MaxSpreadPoints=25.0
 ATR_SL_Multiplier=1.15
-ATR_TP_Multiplier=4.20
+ATR_TP_Multiplier=3.50
 
 ; --- ICT Strategy Parameters ---
 UseLiquiditySweeps=true
@@ -110,13 +107,11 @@ NewYorkSilverBullet=true
 NYKillZoneStart=14
 NYKillZoneStartMin=30
 NYKillZoneEnd=16
-NYKillZoneEndMin=30
+NYKillZoneEndMin=0
 
 ; --- Position Management & Profit Harvest ---
 UseBreakEven=true
-BE_TriggerATR=1.80
-BE_OffsetPoints=50
-UseTrailingStop=false
+BE_OffsetPoints=90
 UseStructuralTrailing=false
 Trail_StartATR=2.00
 Trail_StepATR=0.85
@@ -145,3 +140,30 @@ SlippagePoints=10
 OrderRetryCount=3
 OrderRetryDelayMs=250
 MinBarsBetweenTrades=6
+UseM1BarEntryTiming=false
+UseM1MicroSwarm=true
+RiskPercent=28.00
+ProfitLockCycleDays=15
+MonthlyTargetProfitPct=25.00
+Cycle2TargetRatio=1.00
+OverallMonthTargetPct=0.0
+BE_TriggerATR=1.20
+DynamicBEOffsetATRRatio=0.70
+UseTrailingStop=false
+SwarmTranchesPerWave=40
+SwarmFastTranchePct=40
+SwarmFastTP_MinATR=0.95
+SwarmFastTP_MaxATR=1.18
+SwarmRunnerTP_MinATR=2.80
+SwarmRunnerTP_MaxATR=3.55
+UseAsyncSwarmExecution=true
+UseStagedSwarmScaleIn=false
+UseMilestoneRatchet=true
+Stage2_TriggerATR=1.85
+Stage2_OffsetATR=1.45
+Stage3_TriggerATR=2.50
+Stage3_OffsetATR=2.10
+
+; --- Profit Shield Governance ---
+UseProfitShield=true
+ProfitShieldMaxRiskPct=35.00
